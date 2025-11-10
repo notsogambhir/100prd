@@ -13,7 +13,11 @@ export function Providers({ children }: ProvidersProps) {
     (window.location.hostname.includes('preview-chat-') || window.location.hostname.includes('space.z.ai'))
 
   if (isPreviewEnvironment) {
-    return <MockSessionProvider>{children}</MockSessionProvider>
+    return (
+      <SessionProvider>
+        <MockSessionProvider>{children}</MockSessionProvider>
+      </SessionProvider>
+    )
   } else {
     return <SessionProvider>{children}</SessionProvider>
   }

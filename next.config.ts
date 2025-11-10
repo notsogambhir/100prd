@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
     // 构建时忽略ESLint错误
     ignoreDuringBuilds: true,
   },
+  // Disable standalone mode for build compatibility
+  output: undefined,
 };
 
 export default nextConfig;

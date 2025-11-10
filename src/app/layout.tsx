@@ -1,10 +1,18 @@
-'use client'
-
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from "@/components/providers";
+
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+});
 
 export const metadata: Metadata = {
   title: "NBA OBE Portal - Outcome Based Education Management",
@@ -23,7 +31,6 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "NBA OBE Portal",
     description: "Comprehensive outcome based education management system",
-    },
   },
 };
 
@@ -34,7 +41,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
+      <body className={`${geist.variable} ${geistMono.variable} antialiased`}>
         <Providers>
           {children}
           <Toaster />
