@@ -1,0 +1,24 @@
+import { DefaultSession } from 'next-auth'
+
+declare module 'next-auth' {
+  interface User {
+    role: string
+    collegeId?: string
+    status: string
+  }
+
+  interface Session extends DefaultSession {
+    user: {
+      id: string
+      role: string
+      collegeId?: string
+      status: string
+    } & DefaultSession['user']
+  }
+
+  interface JWT {
+    role: string
+    collegeId?: string
+    status: string
+  }
+}
