@@ -151,9 +151,7 @@ export default function CourseDetail() {
   const [coForm, setCoForm] = useState({ code: '', description: '' })
   const [assessmentForm, setAssessmentForm] = useState({ name: '', type: 'Internal' as const, sectionId: '' })
   const [teacherAssignment, setTeacherAssignment] = useState({ teacherId: '', assignmentType: 'single' as const })
-  // const [coPoMappings, setCoPoMappings] = useState<Record<string, Record<string, number>>>({})
-  // const [pos, setPos] = useState<ProgramOutcome[]>([])
-  // const [isLoadingMappings, setIsLoadingMappings] = useState(false)
+  const [isLoadingMappings, setIsLoadingMappings] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -612,7 +610,11 @@ export default function CourseDetail() {
                           <Badge variant="outline" className="ml-2">{assessment.type}</Badge>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => router.push(`/assessments/${assessment.id}/questions`)}
+                          >
                             Manage Questions
                           </Button>
                           <AlertDialog>
@@ -658,10 +660,59 @@ export default function CourseDetail() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8">
-                  <p className="text-gray-500">CO-PO mapping interface will be implemented here</p>
-                  <p className="text-sm text-gray-400 mt-2">This will show a matrix of COs vs POs with dropdown selectors for correlation levels (0-3)</p>
-                </div>
+                {cos.length === 0 || pos.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">
+                      {cos.length === 0 && pos.length === 0 && "Please add Course Outcomes and ensure Program Outcomes exist to create mappings."}
+                      {cos.length === 0 && pos.length > 0 && "Please add Course Outcomes to create mappings."}
+                      {cos.length > 0 && pos.length === 0 && "Please ensure Program Outcomes exist to create mappings."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="border border-gray-300 bg-gray-50 p-2 text-left font-medium">CO \ PO</th>
+                          {pos.map((po) => (
+                            <th key={po.id} className="border border-gray-300 bg-gray-50 p-2 text-center font-medium min-w-[100px]">
+                              <div>{po.code}</div>
+                              <div className="text-xs text-gray-600 font-normal">{po.description.substring(0, 30)}...</div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cos.map((co) => (
+                          <tr key={co.id}>
+                            <td className="border border-gray-300 bg-gray-50 p-2 font-medium">
+                              <div>{co.code}</div>
+                              <div className="text-xs text-gray-600">{co.description.substring(0, 40)}...</div>
+                            </td>
+                            {pos.map((po) => (
+                              <td key={po.id} className="border border-gray-300 p-2 text-center">
+                                <Select
+                                  value={coPoMappings[co.id]?.[po.id]?.toString() || '0'}
+                                  onValueChange={(value) => handleMappingChange(co.id, po.id, parseInt(value))}
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="0">0 - No Correlation</SelectItem>
+                                    <SelectItem value="1">1 - Low Correlation</SelectItem>
+                                    <SelectItem value="2">2 - Medium Correlation</SelectItem>
+                                    <SelectItem value="3">3 - High Correlation</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -679,9 +730,85 @@ export default function CourseDetail() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8">
-                  <p className="text-gray-500">Faculty assignment interface will be implemented here</p>
-                  <p className="text-sm text-gray-400 mt-2">This will allow assigning single teacher or teachers by section</p>
+                <div className="space-y-6">
+                  {/* Assignment Type Selection */}
+                  <div>
+                    <Label>Assignment Type</Label>
+                    <div className="flex gap-4 mt-2">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          id="single-teacher"
+                          name="assignment-type"
+                          checked={teacherAssignment.assignmentType === 'single'}
+                          onChange={() => setTeacherAssignment({ ...teacherAssignment, assignmentType: 'single' })}
+                        />
+                        <Label htmlFor="single-teacher">Single Teacher for Entire Course</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          id="by-section"
+                          name="assignment-type"
+                          checked={teacherAssignment.assignmentType === 'by-section'}
+                          onChange={() => setTeacherAssignment({ ...teacherAssignment, assignmentType: 'by-section' })}
+                        />
+                        <Label htmlFor="by-section">Assign by Section</Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Single Teacher Assignment */}
+                  {teacherAssignment.assignmentType === 'single' && (
+                    <div>
+                      <Label htmlFor="teacher-select">Select Teacher</Label>
+                      <Select value={teacherAssignment.teacherId} onValueChange={(value) => setTeacherAssignment({ ...teacherAssignment, teacherId: value })}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a teacher" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teachers.map((teacher) => (
+                            <SelectItem key={teacher.id} value={teacher.id}>
+                              {teacher.name} ({teacher.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button 
+                        className="mt-2" 
+                        onClick={() => {
+                          // Handle single teacher assignment
+                          setHasUnsavedChanges(true)
+                        }}
+                        disabled={!teacherAssignment.teacherId}
+                      >
+                        Assign Teacher
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* By Section Assignment */}
+                  {teacherAssignment.assignmentType === 'by-section' && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Assign different teachers for different sections of this course
+                      </p>
+                      <div className="text-center py-8">
+                        <p className="text-gray-500">Section-based assignment will be implemented here</p>
+                        <p className="text-sm text-gray-400 mt-2">This will show sections with teacher selection dropdowns</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Current Assignment Display */}
+                  {course.teacher && (
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h4 className="font-medium mb-2">Current Assignment</h4>
+                      <p className="text-sm">
+                        <strong>Teacher:</strong> {course.teacher.name} ({course.teacher.email})
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

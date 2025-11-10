@@ -14,71 +14,107 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get PO with basic info
-    const po = await db.programOutcome.findFirst({
-      where: {
-        poId: poId || undefined,
-        programId: programId || undefined
-      },
-      include: {
+    if (programId) {
+      // Get all POs for the program and calculate their attainment
+      const pos = await db.programOutcome.findMany({
+        where: { programId },
+        select: { id: true, code: true, description: true, indirectAttainment: true },
+        include: {
+          program: {
+            select: {
+              name: true,
+              code: true
+            }
+          }
+        }
+      })
+
+      // Calculate attainment for each PO using the new engine
+      const poAttainments = await Promise.all(
+        pos.map(async (po) => {
+          // Call the calculation engine
+          const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/attainment/calculate?type=overall-po&poId=${po.id}`)
+          const data = await response.json()
+          
+          return {
+            id: po.id,
+            code: po.code,
+            description: po.description,
+            indirectAttainment: po.indirectAttainment || 3.0,
+            overallAttainment: data
+          }
+        })
+      )
+
+      return NextResponse.json({
         program: {
-          select: {
-            name: true,
-            code: true
+          id: programId,
+          pos: poAttainments
+        }
+      })
+    } else {
+      // Get single PO with attainment
+      const po = await db.programOutcome.findUnique({
+        where: { id: poId },
+        select: {
+          id: true,
+          code: true,
+          description: true,
+          indirectAttainment: true,
+          program: {
+            select: {
+              name: true,
+              code: true
+            }
           }
         },
-        coPoMappings: {
-          include: {
-            co: {
-              select: {
-                code: true,
-                description: true
+        include: {
+          coPoMappings: {
+            include: {
+              co: {
+                select: {
+                  code: true,
+                  description: true
+                }
               }
             }
           }
         }
-      }
-    })
+      })
 
-    if (!po) {
-      return NextResponse.json(
-        { error: 'Program Outcome not found' },
-        { status: 404 }
-      )
+      if (!po) {
+        return NextResponse.json(
+          { error: 'Program Outcome not found' },
+          { status: 404 }
+        )
+      }
+
+      // Calculate attainment using the new engine
+      const [directAttainment, overallAttainment] = await Promise.all([
+        (await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/attainment/calculate?type=direct-po&poId=${poId}`)).json(),
+        (await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/attainment/calculate?type=overall-po&poId=${poId}`)).json()
+      ])
+
+      return NextResponse.json({
+        po: {
+          id: po.id,
+          code: po.code,
+          description: po.description,
+          program: po.program,
+          indirectAttainment: po.indirectAttainment || 3.0
+        },
+        calculations: {
+          directAttainment: parseFloat(directAttainment.toFixed(2)),
+          indirectAttainment: parseFloat((po.indirectAttainment || 3.0).toFixed(2)),
+          directWeight: 70,
+          indirectWeight: 30,
+          overallAttainment: parseFloat(overallAttainment.toFixed(2))
+        },
+        details: {
+          coPoMappings: po.coPoMappings
+        }
+      })
     }
-
-    // Get indirect attainment from database
-    const indirectAttainment = po.indirectAttainment || 3.0
-
-    // Calculate direct PO attainment (simplified version)
-    const directAttainment = 2.5 // Placeholder value
-
-    // Get system settings for weights
-    const directWeight = 70
-    const indirectWeight = 30
-
-    // Calculate overall PO attainment
-    const overallAttainment = (directAttainment * (directWeight / 100)) + (indirectAttainment * (indirectWeight / 100))
-
-    return NextResponse.json({
-      po: {
-        id: po.id,
-        code: po.code,
-        description: po.description,
-        program: po.program,
-        indirectAttainment
-      },
-      calculations: {
-        directAttainment: parseFloat(directAttainment.toFixed(2)),
-        indirectAttainment: parseFloat(indirectAttainment.toFixed(2)),
-        directWeight,
-        indirectWeight,
-        overallAttainment: parseFloat(overallAttainment.toFixed(2))
-      },
-      details: {
-        coPoMappings: po.coPoMappings
-      }
-    })
 
   } catch (error) {
     console.error('Failed to calculate PO attainment:', error)

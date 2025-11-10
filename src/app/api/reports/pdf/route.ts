@@ -137,23 +137,46 @@ async function generateCourseAttainmentReport(courseId: string) {
     })
 
     return {
-      type: 'course-attainment',
-      course: {
-        code: course.code,
-        name: course.name,
-        program: course.program,
-        batch: course.batch,
-        section: course.section,
-        teacher: course.teacher
-      },
-      coSummary,
-      studentBreakdown
+      student,
+      coData
     }
+  })
+
+  return {
+    type: 'course-attainment',
+    course: {
+      code: course.code,
+      name: course.name,
+      program: course.program,
+      batch: course.batch,
+      section: course.section,
+      teacher: course.teacher
+    },
+    coSummary,
+    studentBreakdown
   }
 }
 
+async function generateAssessmentComparisonReport(courseId: string) {
+  const course = await db.course.findUnique({
+    where: { id: courseId },
+    include: {
+      program: {
+        select: {
           name: true,
           code: true
+        }
+      },
+      batch: {
+        select: {
+          name: true,
+          startYear: true,
+          endYear: true
+        }
+      },
+      section: {
+        select: {
+          name: true
         }
       },
       assessments: {
@@ -173,24 +196,25 @@ async function generateCourseAttainmentReport(courseId: string) {
               }
             }
           }
-        },
-        enrollments: {
-          include: {
-            student: {
-              select: {
-                id: true,
-                name: true,
-                rollNumber: true
-              }
+        }
+      },
+      enrollments: {
+        include: {
+          student: {
+            select: {
+              id: true,
+              name: true,
+              rollNumber: true
             }
           }
         }
       }
-    })
-
-    if (!course) {
-      throw new Error('Course not found')
     }
+  })
+
+  if (!course) {
+    throw new Error('Course not found')
+  }
 
   const studentScores = course.enrollments.map((enrollment) => {
     const student = enrollment.student
@@ -218,23 +242,28 @@ async function generateCourseAttainmentReport(courseId: string) {
     })
 
     return {
-      type: 'assessment-comparison',
-      course: {
-        code: course.code,
-        name: course.name,
-        program: course.program,
-        batch: course.batch,
-        section: course.section
-      },
-      assessments: course.assessments.map(a => ({
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        totalQuestions: a.questions.length,
-        totalMarks: a.questions.reduce((sum, q) => sum + q.maxMarks, 0)
-      })),
-      studentScores
+      student,
+      assessmentScores
     }
+  })
+
+  return {
+    type: 'assessment-comparison',
+    course: {
+      code: course.code,
+      name: course.name,
+      program: course.program,
+      batch: course.batch,
+      section: course.section
+    },
+    assessments: course.assessments.map(a => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      totalQuestions: a.questions.length,
+      totalMarks: a.questions.reduce((sum, q) => sum + q.maxMarks, 0)
+    })),
+    studentScores
   }
 }
 
@@ -272,7 +301,9 @@ async function generatePDFContent(pdf: any, reportData: any, reportType: string)
   if (reportType === 'course-attainment') {
     reportData.coSummary.forEach((co: any) => {
       pdf.text(`${co.coCode}: ${co.description}`, margin, yPosition)
+      yPosition += 6
       pdf.text(`Students Meeting Target: ${co.studentsMeetingTarget}/${co.totalStudents} (${co.percentageMeetingTarget.toFixed(1)}%)`, margin, yPosition)
+      yPosition += 6
       pdf.text(`Attainment Level: ${getAttainmentLevelText(co.attainmentLevel)}`, margin, yPosition)
       yPosition += 10
     })

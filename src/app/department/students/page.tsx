@@ -288,6 +288,34 @@ export default function DepartmentStudents() {
     }
   }
 
+  const handleBulkUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('type', 'students')
+
+    fetch('/api/bulk-upload', {
+      method: 'POST',
+      body: formData
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.successful > 0) {
+          alert(`Successfully uploaded ${data.successful} students!`)
+          fetchData()
+        } else {
+          alert(`Upload completed with ${data.errors} errors. Check console for details.`)
+        }
+        console.log('Upload result:', data)
+      })
+      .catch(error => {
+        console.error('Error uploading students:', error)
+        alert('Error uploading students')
+      })
+  }
+
   const openEditDialog = (student: Student) => {
     setEditingStudent(student)
     setStudentForm({
