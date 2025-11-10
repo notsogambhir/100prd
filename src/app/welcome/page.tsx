@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { useMockSession } from '@/hooks/use-mock-session'
 import { 
   BookOpen, 
   Users, 
@@ -20,24 +19,18 @@ import {
   Home,
   BarChart3,
   CheckCircle,
-  Clock
-  UserCheck
-  ClipboardList
-  Building
-  ArrowRight
-  Star
+  Clock,
+  UserCheck,
+  ClipboardList,
+  Building,
+  ArrowRight,
+  Star,
   Activity
 } from 'lucide-react'
 
 export default function Welcome() {
-  const { data: session, status } = useSession()
+  const { session, isLoading, signOut } = useMockSession()
   const router = useRouter()
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin')
-    }
-  }, [status, router])
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -203,7 +196,7 @@ export default function Welcome() {
     }
   }
 
-  if (status === 'loading') {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -217,6 +210,12 @@ export default function Welcome() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
           <p className="text-gray-600 mt-2">Please sign in to access the portal.</p>
+          <Button 
+            className="mt-4"
+            onClick={() => router.push('/auth/signin')}
+          >
+            Go to Sign In
+          </Button>
         </div>
       </div>
     )
@@ -244,9 +243,8 @@ export default function Welcome() {
               {session.user.name}
             </div>
             <Button variant="outline" onClick={() => {
-              localStorage.removeItem('selectedProgramId')
-              localStorage.removeItem('selectedBatchId')
-              // Sign out logic would go here
+              console.log('Sign out clicked')
+              signOut()
             }}>
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
@@ -268,26 +266,31 @@ export default function Welcome() {
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {quickActions.map((action, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow cursor-pointer group">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center text-lg">
-                    <action.icon className="h-6 w-6 mr-3 text-blue-600 group-hover:text-blue-700" />
-                    {action.label}
-                  </CardTitle>
-                  <CardDescription className="text-sm">
-                    {action.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <Button 
-                    className="w-full group-hover:bg-blue-600 group-hover:text-white transition-colors"
-                    onClick={() => router.push(action.href)}
-                  >
-                    Get Started
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </CardContent>
-              </Card>
+              <div 
+                key={index} 
+                className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer border border-gray-200"
+                onClick={() => {
+                  console.log('Card clicked:', action.href)
+                  router.push(action.href)
+                }}
+              >
+                <div className="flex items-center text-lg mb-3">
+                  <action.icon className="h-6 w-6 mr-3 text-blue-600" />
+                  {action.label}
+                </div>
+                <p className="text-sm text-gray-600 mb-4">{action.description}</p>
+                <button 
+                  className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    console.log('Button clicked:', action.href)
+                    router.push(action.href)
+                  }}
+                >
+                  Get Started
+                  <ArrowRight className="h-4 w-4 ml-2 inline" />
+                </button>
+              </div>
             ))}
           </div>
         </div>

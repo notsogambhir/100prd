@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, BookOpen, Users, Calendar } from 'lucide-react'
+import { useMockSession } from '@/hooks/use-mock-session'
 
 interface Program {
   id: string
@@ -27,19 +27,13 @@ interface Program {
 }
 
 export default function ProgramSelection() {
-  const { data: session, status } = useSession()
+  const { session, isLoading } = useMockSession()
+  const [programsLoading, setProgramsLoading] = useState(true)
   const router = useRouter()
   const [programs, setPrograms] = useState<Program[]>([])
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null)
   const [selectedBatch, setSelectedBatch] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin')
-    }
-  }, [status, router])
 
   useEffect(() => {
     if (session?.user) {
@@ -57,7 +51,7 @@ export default function ProgramSelection() {
     } catch (error) {
       console.error('Failed to fetch programs:', error)
     } finally {
-      setIsLoading(false)
+      setProgramsLoading(false)
     }
   }
 
@@ -74,13 +68,13 @@ export default function ProgramSelection() {
       localStorage.setItem('selectedProgramId', selectedProgram.id)
       localStorage.setItem('selectedBatchId', selectedBatch)
       
-      router.push('/dashboard')
+      router.push('/welcome')
     } catch (error) {
       console.error('Failed to save selection:', error)
     }
   }
 
-  if (status === 'loading' || isLoading) {
+  if (isLoading || programsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -89,7 +83,20 @@ export default function ProgramSelection() {
   }
 
   if (!session) {
-    return null
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
+          <p className="text-gray-600 mt-2">Please sign in to access the portal.</p>
+          <Button 
+            className="mt-4"
+            onClick={() => router.push('/auth/signin')}
+          >
+            Go to Sign In
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (

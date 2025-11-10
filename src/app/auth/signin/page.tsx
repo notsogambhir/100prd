@@ -16,9 +16,8 @@ export default function SignIn() {
   const [error, setError] = useState('')
   const router = useRouter()
 
-  // Check if we're in Z.ai preview environment
-  const isPreviewEnvironment = typeof window !== 'undefined' && 
-    (window.location.hostname.includes('preview-chat-') || window.location.hostname.includes('space.z.ai'))
+  // Always use mock session for demo purposes
+  const isPreviewEnvironment = true
 
   // Demo users for demonstration
   const demoUsers = [
@@ -56,7 +55,7 @@ export default function SignIn() {
         // Redirect based on role
         const role = mockSession.user.role
         if (role === 'Admin' || role === 'University' || role === 'Department') {
-          router.push('/dashboard')
+          router.push('/welcome')
         } else {
           router.push('/program-selection')
         }
@@ -75,7 +74,7 @@ export default function SignIn() {
         if (result) {
           const role = demoUsers.find(u => u.email === email)?.role || 'Teacher'
           if (role === 'Admin' || role === 'University' || role === 'Department') {
-            router.push('/dashboard')
+            router.push('/welcome')
           } else {
             router.push('/program-selection')
           }

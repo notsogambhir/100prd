@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
+import { useMockSession } from '@/hooks/use-mock-session'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -67,12 +67,11 @@ interface College {
 }
 
 export default function UserManagement() {
-  const { data: session, status } = useSession()
+  const { session, status, isLoading } = useMockSession()
   const router = useRouter()
   const [users, setUsers] = useState<User[]>([])
   const [colleges, setColleges] = useState<College[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -138,10 +137,10 @@ export default function UserManagement() {
         const collegesData = await collegesRes.json()
         setColleges(collegesData)
       }
-    } catch (error) {
-      console.error('Failed to fetch data:', error)
-    } finally {
-      setIsLoading(false)
+      } finally {
+      if (usersLoading) {
+        setUsersLoading(false)
+      }
     }
   }
 
@@ -237,7 +236,7 @@ export default function UserManagement() {
     return status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
   }
 
-  if (status === 'loading' || isLoading) {
+  if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
