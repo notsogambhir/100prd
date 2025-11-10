@@ -3,21 +3,27 @@ import { db } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const co = await db.courseOutcome.findUnique({
       where: { id: params.id },
       include: {
-        course: true,
-        coPoMappings: {
-          include: {
-            po: true
+        course: {
+          select: {
+            code: true,
+            name: true
           }
         },
         assessmentQuestions: {
           include: {
-            assessment: true
+            assessment: {
+              select: {
+                name: true,
+                type: true
+              }
+            }
           }
         }
       }
@@ -25,7 +31,7 @@ export async function GET(
 
     if (!co) {
       return NextResponse.json(
-        { error: 'Course outcome not found' },
+        { error: 'Course Outcome not found' },
         { status: 404 }
       )
     }
@@ -42,20 +48,26 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const body = await request.json()
     const { code, description } = body
 
     const co = await db.courseOutcome.update({
       where: { id: params.id },
       data: {
-        code,
-        description
+        ...(code !== undefined && { code }),
+        ...(description !== undefined && { description })
       },
       include: {
-        course: true
+        course: {
+          select: {
+            code: true,
+            name: true
+          }
+        }
       }
     })
 
@@ -71,14 +83,15 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     await db.courseOutcome.delete({
       where: { id: params.id }
     })
 
-    return NextResponse.json({ message: 'Course outcome deleted successfully' })
+    return NextResponse.json({ message: 'Course Outcome deleted successfully' })
   } catch (error) {
     console.error('Failed to delete course outcome:', error)
     return NextResponse.json(

@@ -3,45 +3,80 @@ import { db } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const course = await db.course.findUnique({
       where: { id: params.id },
       include: {
         program: {
-          include: {
-            college: true
+          select: {
+            name: true,
+            code: true
           }
         },
-        batch: true,
-        section: true,
-        teacher: true,
+        batch: {
+          select: {
+            name: true,
+            startYear: true,
+            endYear: true
+          }
+        },
+        section: {
+          select: {
+            name: true
+          }
+        },
+        teacher: {
+          select: {
+            name: true,
+            email: true
+          }
+        },
+        creator: {
+          select: {
+            name: true,
+            email: true
+          }
+        },
         cos: {
-          orderBy: {
-            code: 'asc'
+          include: {
+            assessmentQuestions: {
+              include: {
+                assessment: {
+                  select: {
+                    name: true,
+                    type: true
+                  }
+                }
+              }
+            }
           }
         },
         assessments: {
           include: {
             questions: {
               include: {
-                co: true
-              }
-            },
-            marks: {
-              include: {
-                student: true
+                co: {
+                  select: {
+                    code: true,
+                    description: true
+                  }
+                }
               }
             }
-          },
-          orderBy: {
-            createdAt: 'desc'
           }
         },
         enrollments: {
           include: {
-            student: true
+            student: {
+              select: {
+                id: true,
+                name: true,
+                rollNumber: true
+              }
+            }
           }
         }
       }
@@ -66,42 +101,47 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const body = await request.json()
-    const { 
-      name, 
-      description, 
-      credits, 
-      status, 
-      target, 
-      attainmentLevel1, 
-      attainmentLevel2, 
-      attainmentLevel3,
-      sectionId, 
-      teacherId 
-    } = body
+    const { name, description, credits, status, target, teacherId, sectionId } = body
 
     const course = await db.course.update({
       where: { id: params.id },
       data: {
-        name,
-        description,
-        credits,
-        status,
-        target,
-        attainmentLevel1,
-        attainmentLevel2,
-        attainmentLevel3,
-        sectionId,
-        teacherId
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(credits !== undefined && { credits }),
+        ...(status !== undefined && { status }),
+        ...(target !== undefined && { target }),
+        ...(teacherId !== undefined && { teacherId }),
+        ...(sectionId !== undefined && { sectionId })
       },
       include: {
-        program: true,
-        batch: true,
-        section: true,
-        teacher: true
+        program: {
+          select: {
+            name: true,
+            code: true
+          }
+        },
+        batch: {
+          select: {
+            name: true
+          }
+        },
+        section: {
+          select: {
+            name: true
+          }
+        },
+        teacher: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
       }
     })
 
@@ -117,9 +157,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     await db.course.delete({
       where: { id: params.id }
     })

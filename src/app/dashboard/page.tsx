@@ -52,6 +52,7 @@ export default function Dashboard() {
     const role = session?.user?.role
     const baseItems = [
       { icon: Home, label: 'Dashboard', href: '/dashboard' },
+      { icon: Menu, label: 'Welcome Tab', href: '/welcome-tab' },
     ]
 
     if (role === 'Admin') {

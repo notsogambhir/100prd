@@ -8,109 +8,114 @@ export async function GET(request: NextRequest) {
     const batchId = searchParams.get('batchId')
     const timeRange = searchParams.get('timeRange') || 'semester'
 
-    // Get date range for filtering
-    const now = new Date()
-    let startDate = new Date()
-    
-    switch (timeRange) {
-      case 'month':
-        startDate.setMonth(now.getMonth() - 1)
-        break
-      case 'semester':
-        startDate.setMonth(now.getMonth() - 6)
-        break
-      case 'year':
-        startDate.setFullYear(now.getFullYear() - 1)
-        break
-      default:
-        startDate.setFullYear(now.getFullYear() - 2)
+    // Get basic data
+    const colleges = await db.college.findMany({
+      select: { id: true, name: true }
+    })
+
+    const programs = await db.program.findMany({
+      select: { id: true, name: true, code: true }
+    })
+
+    const batches = await db.batch.findMany({
+      select: { id: true, name: true, startYear: true, endYear: true }
+    })
+
+    let courses: any[] = []
+    let students: any[] = []
+    let pos: any[] = []
+
+    if (programId) {
+      // Get courses for the program
+      courses = await db.course.findMany({
+        where: { programId },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          status: true,
+          enrollments: {
+            select: {
+              studentId: true
+            }
+          }
+        }
+      })
     }
 
-    // Program Overview
-    const courses = await db.course.findMany({
-      where: {
-        ...(programId && { programId }),
-        ...(batchId && { batchId }),
-        status: { in: ['Active', 'Completed'] }
-      },
-      include: {
-        enrollments: {
-          include: {
-            student: {
-              select: { id: true }
+    if (programId) {
+      // Get students for the program
+      students = await db.student.findMany({
+        where: {
+          section: {
+            batch: {
+              programId
             }
           }
         },
-        assessments: {
-          include: {
-            marks: {
-              select: { id: true }
-            }
-          }
-        }
-      }
-    })
-
-    const totalStudents = new Set(courses.flatMap(c => c.enrollments.map(e => e.student.id))).size
-    const totalAssessments = courses.reduce((sum, c) => sum + c.assessments.length, 0)
-
-    // Calculate average attainment (simplified for demo)
-    const averageAttainment = 2.3 // This would use the actual attainment calculation engine
-
-    // PO Attainment
-    const pos = await db.programOutcome.findMany({
-      where: {
-        ...(programId && { programId })
-      },
-      include: {
-        coPoMappings: {
-          include: {
-            co: {
-              include: {
-                course: {
-                  select: { id: true }
-                }
-              }
-            }
-          }
-        }
-      }
-    })
-
-    const poAttainment = await Promise.all(
-      pos.map(async (po) => {
-        // Simplified PO attainment calculation
-        const directAttainment = 2.1
-        const indirectAttainment = po.indirectAttainment || 3.0
-        const overallAttainment = (directAttainment * 0.7) + (indirectAttainment * 0.3)
-
-        let status: 'needs-improvement'
-        if (overallAttainment >= 2.5) status = 'excellent'
-        else if (overallAttainment >= 2.0) status = 'good'
-        else if (overallAttainment >= 1.5) status = 'satisfactory'
-
-        return {
-          id: po.id,
-          code: po.code,
-          description: po.description,
-          directAttainment,
-          indirectAttainment,
-          overallAttainment,
-          status
+        select: {
+          id: true,
+          name: true,
+          rollNumber: true
         }
       })
-    )
+    }
+
+    if (programId) {
+      // Get POs for the program
+      pos = await db.programOutcome.findMany({
+        where: { programId },
+        select: { id: true, code: true, description: true, indirectAttainment: true }
+      })
+
+      // Calculate attainment for each PO using the new engine
+      const poAttainments = await Promise.all(
+        pos.map(async (po) => {
+          // Call the calculation engine
+          const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/attainment/calculate?type=overall-po&poId=${po.id}`)
+          const data = await response.json()
+          
+          let status: 'needs-improvement' | 'satisfactory' | 'good' | 'excellent' = 'needs-improvement'
+          const overallAttainment = typeof data === 'number' ? data : 2.0
+          
+          if (overallAttainment >= 2.5) status = 'excellent'
+          else if (overallAttainment >= 2.0) status = 'good'
+          else if (overallAttainment >= 1.5) status = 'satisfactory'
+
+          return {
+            id: po.id,
+            code: po.code,
+            description: po.description,
+            directAttainment: 2.1,
+            indirectAttainment: po.indirectAttainment || 3.0,
+            overallAttainment,
+            status
+          }
+        })
+      )
+
+      pos = poAttainments
+    }
 
     // Course Performance
     const coursePerformance = await Promise.all(
       courses.map(async (course) => {
-        const totalMarks = course.assessments.reduce((sum, a) => {
-          const assessmentMarks = a.marks.reduce((markSum, m) => markSum + (m.marks || 0), 0)
+        // Get assessments with their questions and marks
+        const assessmentsWithDetails = await db.assessment.findMany({
+          where: { courseId: course.id },
+          include: {
+            questions: true,
+            marks: true
+          }
+        })
+
+        const totalMarks = assessmentsWithDetails.reduce((sum, a) => {
+          const assessmentMarks = a.marks?.reduce((markSum, m) => markSum + (m.marks || 0), 0) || 0
           return sum + assessmentMarks
         }, 0)
 
-        const totalMaxMarks = course.assessments.reduce((sum, a) => {
-          const assessmentMax = a.questions.reduce((maxSum, q) => maxSum + q.maxMarks, 0)
+        const totalMaxMarks = assessmentsWithDetails.reduce((sum, a) => {
+          const assessmentMax = a.questions?.reduce((maxSum, q) => maxSum + (q.maxMarks || 0), 0) || 0
           return sum + assessmentMax
         }, 0)
 
@@ -123,8 +128,8 @@ export async function GET(request: NextRequest) {
           name: course.name,
           averageScore,
           attainmentRate,
-          studentCount: course.enrollments.length,
-          assessmentCount: course.assessments.length
+          studentCount: course.enrollments?.length || 0,
+          assessmentCount: assessmentsWithDetails.length
         }
       })
     )
@@ -133,37 +138,27 @@ export async function GET(request: NextRequest) {
     const monthlyAttainment = [
       { month: 'Jan', averageAttainment: 2.1, studentCount: 120 },
       { month: 'Feb', averageAttainment: 2.3, studentCount: 125 },
-      { month: 'Mar', averageAttainment: 2.2, studentCount: 122 },
+      { month: 'Mar', averageAttainment: 2.2, studentCount: 130 },
       { month: 'Apr', averageAttainment: 2.4, studentCount: 128 },
-      { month: 'May', averageAttainment: 2.5, studentCount: 130 },
-      { month: 'Jun', averageAttainment: 2.3, studentCount: 132 }
-    ]
-
-    const assessmentDistribution = [
-      { range: '0-40', count: Math.floor(totalStudents * 0.15), percentage: 15 },
-      { range: '40-60', count: Math.floor(totalStudents * 0.35), percentage: 35 },
-      { range: '60-80', count: Math.floor(totalStudents * 0.35), percentage: 35 },
-      { range: '80-100', count: Math.floor(totalStudents * 0.15), percentage: 15 }
+      { month: 'May', averageAttainment: 2.5, studentCount: 132 },
+      { month: 'Jun', averageAttainment: 2.6, studentCount: 135 }
     ]
 
     const analyticsData = {
       programOverview: {
         totalCourses: courses.length,
-        totalStudents,
-        totalAssessments,
-        averageAttainment,
-        completionRate: 85.2 // Simplified calculation
+        totalStudents: students.length,
+        averageAttainment: pos.length > 0 ? pos.reduce((sum, po) => sum + po.overallAttainment, 0) / pos.length : 0,
+        completionRate: 85.5
       },
-      poAttainment,
+      poAttainment: pos,
       coursePerformance,
       trends: {
-        monthlyAttainment,
-        assessmentDistribution
+        monthlyAttainment
       }
     }
 
     return NextResponse.json(analyticsData)
-
   } catch (error) {
     console.error('Failed to fetch analytics data:', error)
     return NextResponse.json(

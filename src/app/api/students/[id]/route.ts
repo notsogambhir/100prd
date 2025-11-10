@@ -3,9 +3,10 @@ import { db } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const student = await db.student.findUnique({
       where: { id: params.id },
       include: {
@@ -29,17 +30,9 @@ export async function GET(
           include: {
             course: {
               select: {
-                id: true,
                 code: true,
                 name: true,
-                credits: true,
-                status: true,
-                teacher: {
-                  select: {
-                    name: true,
-                    email: true
-                  }
-                }
+                status: true
               }
             }
           }
@@ -49,25 +42,13 @@ export async function GET(
             assessment: {
               select: {
                 name: true,
-                type: true,
-                course: {
-                  select: {
-                    code: true,
-                    name: true
-                  }
-                }
+                type: true
               }
             },
             question: {
               select: {
                 name: true,
-                maxMarks: true,
-                co: {
-                  select: {
-                    code: true,
-                    description: true
-                  }
-                }
+                maxMarks: true
               }
             }
           }
@@ -94,53 +75,26 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const body = await request.json()
-    const { name, email, rollNumber, sectionId, status } = body
-
-    // Check for duplicate roll number (excluding current student)
-    if (rollNumber) {
-      const existingStudent = await db.student.findFirst({
-        where: {
-          rollNumber,
-          id: { not: params.id }
-        }
-      })
-
-      if (existingStudent) {
-        return NextResponse.json(
-          { error: 'Student with this roll number already exists' },
-          { status: 400 }
-        )
-      }
-    }
+    const { name, email, rollNumber, status, sectionId } = body
 
     const student = await db.student.update({
       where: { id: params.id },
       data: {
         ...(name !== undefined && { name }),
-        ...(email !== undefined && { email: email || null }),
+        ...(email !== undefined && { email }),
         ...(rollNumber !== undefined && { rollNumber }),
-        ...(sectionId !== undefined && { sectionId: sectionId || null }),
-        ...(status !== undefined && { status })
+        ...(status !== undefined && { status }),
+        ...(sectionId !== undefined && { sectionId })
       },
       include: {
         section: {
           select: {
-            name: true,
-            batch: {
-              select: {
-                name: true,
-                program: {
-                  select: {
-                    name: true,
-                    code: true
-                  }
-                }
-              }
-            }
+            name: true
           }
         }
       }
@@ -158,10 +112,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Delete will cascade to enrollments and marks
+    const params = await context.params
     await db.student.delete({
       where: { id: params.id }
     })

@@ -3,9 +3,10 @@ import { db } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const assessment = await db.assessment.findUnique({
       where: { id: params.id },
       include: {
@@ -20,14 +21,9 @@ export async function GET(
             }
           }
         },
-        section: {
+        batch: {
           select: {
-            name: true,
-            batch: {
-              select: {
-                name: true
-              }
-            }
+            name: true
           }
         },
         creator: {
@@ -95,9 +91,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const body = await request.json()
     const { name, type } = body
 
@@ -114,7 +111,7 @@ export async function PUT(
             name: true
           }
         },
-        section: {
+        batch: {
           select: {
             name: true
           }
@@ -134,9 +131,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     // Delete will cascade to questions and marks due to schema relationships
     await db.assessment.delete({
       where: { id: params.id }

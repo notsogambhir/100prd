@@ -3,23 +3,38 @@ import { db } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const user = await db.user.findUnique({
       where: { id: params.id },
       include: {
-        college: true,
+        college: {
+          select: {
+            name: true
+          }
+        },
         managedPrograms: {
-          include: {
-            college: true,
-            batches: true
+          select: {
+            name: true,
+            code: true
           }
         },
         assignedCourses: {
+          select: {
+            code: true,
+            name: true
+          }
+        },
+        teacherToPcs: {
           include: {
-            program: true,
-            batch: true
+            pc: {
+              select: {
+                name: true,
+                email: true
+              }
+            }
           }
         }
       }
@@ -32,10 +47,7 @@ export async function GET(
       )
     }
 
-    // Remove password from response
-    const { password, ...userWithoutPassword } = user
-
-    return NextResponse.json(userWithoutPassword)
+    return NextResponse.json(user)
   } catch (error) {
     console.error('Failed to fetch user:', error)
     return NextResponse.json(
@@ -47,30 +59,32 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const body = await request.json()
-    const { name, email, role, collegeId, status } = body
+    const { name, email, role, status, collegeId } = body
 
     const user = await db.user.update({
       where: { id: params.id },
       data: {
-        name,
-        email,
-        role,
-        collegeId,
-        status
+        ...(name !== undefined && { name }),
+        ...(email !== undefined && { email }),
+        ...(role !== undefined && { role }),
+        ...(status !== undefined && { status }),
+        ...(collegeId !== undefined && { collegeId })
       },
       include: {
-        college: true
+        college: {
+          select: {
+            name: true
+          }
+        }
       }
     })
 
-    // Remove password from response
-    const { password, ...userWithoutPassword } = user
-
-    return NextResponse.json(userWithoutPassword)
+    return NextResponse.json(user)
   } catch (error) {
     console.error('Failed to update user:', error)
     return NextResponse.json(
@@ -82,9 +96,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     await db.user.delete({
       where: { id: params.id }
     })

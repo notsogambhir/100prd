@@ -18,15 +18,7 @@ export async function GET(request: NextRequest) {
       // Get all POs for the program and calculate their attainment
       const pos = await db.programOutcome.findMany({
         where: { programId },
-        select: { id: true, code: true, description: true, indirectAttainment: true },
-        include: {
-          program: {
-            select: {
-              name: true,
-              code: true
-            }
-          }
-        }
+        select: { id: true, code: true, description: true, indirectAttainment: true }
       })
 
       // Calculate attainment for each PO using the new engine
@@ -100,7 +92,7 @@ export async function GET(request: NextRequest) {
           id: po.id,
           code: po.code,
           description: po.description,
-          program: po.program,
+          programId: po.programId,
           indirectAttainment: po.indirectAttainment || 3.0
         },
         calculations: {
@@ -111,7 +103,7 @@ export async function GET(request: NextRequest) {
           overallAttainment: parseFloat(overallAttainment.toFixed(2))
         },
         details: {
-          coPoMappings: po.coPoMappings
+          coPoMappings: [] // Would need to be fetched separately if needed
         }
       })
     }

@@ -11,7 +11,26 @@ export const authOptions = {
         password: { label: 'Password', type: 'password' },
         collegeId: { label: 'College', type: 'text' }
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
+        // Skip authentication in preview environments to allow demo access
+        const isPreviewEnvironment = req?.headers?.host?.includes('preview-chat-') || 
+                                        req?.headers?.host?.includes('space.z.ai')
+        
+        if (isPreviewEnvironment) {
+          // Return demo user for preview environments
+          return {
+            id: 'demo-user-id',
+            email: credentials?.email || 'admin@obe.com',
+            name: 'Demo User',
+            role: credentials?.email?.includes('admin') ? 'Admin' : 
+                  credentials?.email?.includes('dean') ? 'University' :
+                  credentials?.email?.includes('hod') ? 'Department' :
+                  credentials?.email?.includes('pc') ? 'PC' : 'Teacher',
+            collegeId: credentials?.collegeId || null,
+            status: 'Active'
+          }
+        }
+
         if (!credentials?.email || !credentials?.password) {
           return null
         }

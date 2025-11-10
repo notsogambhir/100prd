@@ -49,6 +49,37 @@ import {
   Loader2
 } from 'lucide-react'
 
+// Type definitions
+interface AnalyticsData {
+  programOverview: {
+    totalCourses: number
+    totalStudents: number
+    averageAttainment: number
+    completionRate: number
+  }
+  poAttainment: Array<{
+    code: string
+    description: string
+    directAttainment: number
+    indirectAttainment: number
+    overallAttainment: number
+  }>
+  coursePerformance: Array<{
+    code: string
+    name: string
+    averageScore: number
+    attainmentRate: number
+    studentCount: number
+    assessmentCount: number
+  }>
+  trends: {
+    monthlyAttainment: Array<{
+      month: string
+      averageAttainment: number
+    }>
+  }
+}
+
 export default function AnalyticsDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -126,6 +157,8 @@ export default function AnalyticsDashboard() {
     )
   }
 
+  const totalStudents = analyticsData?.programOverview?.totalStudents || 0
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -166,8 +199,7 @@ export default function AnalyticsDashboard() {
                     <SelectItem value="">All Batches</SelectItem>
                     {/* Batches would be populated from API */}
                   </SelectContent>
-                </SelectContent>
-              </Select>
+                </Select>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Time Range</label>
@@ -181,9 +213,7 @@ export default function AnalyticsDashboard() {
                     <SelectItem value="year">This Year</SelectItem>
                     <SelectItem value="all">All Time</SelectItem>
                   </SelectContent>
-                </SelectContent>
-              </SelectTrigger>
-              </Select>
+                </Select>
               </div>
               <div className="flex items-end">
                 <Button onClick={fetchAnalyticsData}>
@@ -277,9 +307,10 @@ export default function AnalyticsDashboard() {
                     cy="50%"
                     labelLine={false}
                     label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    dataKey="value"
                   >
                     <Tooltip />
-                  </PieChart>
+                  </Pie>
                 </RePieChart>
               </ResponsiveContainer>
               <div className="mt-4 space-y-2">
@@ -291,7 +322,6 @@ export default function AnalyticsDashboard() {
                     </div>
                     <span className="text-sm font-medium">{po.overallAttainment.toFixed(2)}</span>
                   </div>
-                ))}
                 ))}
               </div>
             </CardContent>
@@ -324,10 +354,11 @@ export default function AnalyticsDashboard() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+        </div>
 
-          {/* Trends Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            {/* Monthly Attainment Trends */}
+        {/* Trends Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Monthly Attainment Trends */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -351,7 +382,6 @@ export default function AnalyticsDashboard() {
                   />
                 </LineChart>
               </ResponsiveContainer>
-            </CardContent>
             </CardContent>
           </Card>
 
@@ -381,14 +411,16 @@ export default function AnalyticsDashboard() {
                     stroke="#8884d8" 
                     fill="#8884d8" 
                     fillOpacity={0.3} 
-                  </AreaChart>
+                  />
+                </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
+        </div>
 
-          {/* Detailed Tables */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* PO Details Table */}
+        {/* Detailed Tables */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* PO Details Table */}
           <Card>
             <CardHeader>
               <CardTitle>PO Attainment Details</CardTitle>
@@ -406,7 +438,6 @@ export default function AnalyticsDashboard() {
                       <th className="border border-gray-300 px-4 py-2 text-center">Status</th>
                     </tr>
                   </thead>
-                  </thead>
                   <tbody>
                     {analyticsData?.poAttainment?.map((po, index) => {
                       const status = getAttainmentStatus(po.overallAttainment)
@@ -414,20 +445,21 @@ export default function AnalyticsDashboard() {
                       return (
                         <tr key={index} className="hover:bg-gray-50">
                           <td className="border border-gray-300 px-4 py-2 font-medium">{po.code}</td>
-                          <td className="border border-gray-300 px-4 py-2 text-left">Description</td>
-                          <td className="border border-gray-300 px-4 py-2 text-center">Direct</th>
-                              <td className="border border-gray-300 px-4 py-2 text-center">{po.directAttainment.toFixed(2)}</td>
-                              <td className="border border-gray-300 px-4 py-2 text-center">{po.indirectAttainment.toFixed(2)}</td>
-                              <td className="border border-gray-300 px-4 py-2 text-center font-medium">{po.overallAttainment.toFixed(2)}</td>
-                              <td className="border border-gray-300 px-4 py-2 text-center">
-                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${status.color === '#10b981' ? 'bg-green-100 text-green-800' : status.color === '#3b82f6' ? 'bg-blue-100 text-blue-800' : status.color === '#f59e0b' ? 'bg-yellow-100 text-yellow-800' : status.color === '#ef4444' ? 'bg-red-100 text-red-800' }}
-                              <StatusIcon className="h-3 w-3 mr-1" />
-                              {status.status.charAt(0).toUpperCase() + status.status.slice(1)}
-                            </span>
+                          <td className="border border-gray-300 px-4 py-2 text-left">{po.description}</td>
+                          <td className="border border-gray-300 px-4 py-2 text-center">{po.directAttainment.toFixed(2)}</td>
+                          <td className="border border-gray-300 px-4 py-2 text-center">{po.indirectAttainment.toFixed(2)}</td>
+                          <td className="border border-gray-300 px-4 py-2 text-center">{po.overallAttainment.toFixed(2)}</td>
+                          <td className="border border-gray-300 px-4 py-2 text-center">
+                            <div className="flex items-center justify-center">
+                              <StatusIcon className="h-4 w-4 mr-1" style={{ color: status.color }} />
+                              <span className="text-xs" style={{ color: status.color }}>
+                                {status.status}
+                              </span>
+                            </div>
                           </td>
                         </tr>
                       )
-                    )}
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -450,7 +482,6 @@ export default function AnalyticsDashboard() {
                       <th className="border border-gray-300 px-4 py-2 text-center">Students</th>
                       <th className="border border-gray-300 px-4 py-2 text-center">Assessments</th>
                     </tr>
-                  </thead>
                   </thead>
                   <tbody>
                     {analyticsData?.coursePerformance?.map((course, index) => (

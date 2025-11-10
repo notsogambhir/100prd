@@ -3,22 +3,31 @@
 import { useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useMockSession } from '@/lib/mock-session'
 
 export default function Home() {
   const { data: session, status } = useSession()
+  const mockSession = useMockSession()
   const router = useRouter()
 
   useEffect(() => {
-    if (status === 'loading') return
+    // Use mock session in preview environment, regular session otherwise
+    const currentSession = mockSession.session || session
+    const currentStatus = mockSession.loading ? 'loading' : status
 
-    if (status === 'unauthenticated') {
+    if (currentStatus === 'loading') return
+
+    if (currentStatus === 'unauthenticated') {
       router.push('/auth/signin')
-    } else if (session?.user?.role === 'Admin' || session?.user?.role === 'University' || session?.user?.role === 'Department') {
-      router.push('/dashboard')
-    } else {
-      router.push('/program-selection')
+    } else if (currentSession?.user) {
+      const role = currentSession.user.role
+      if (role === 'Admin' || role === 'University' || role === 'Department') {
+        router.push('/dashboard')
+      } else {
+        router.push('/program-selection')
+      }
     }
-  }, [status, session, router])
+  }, [mockSession, session, status, router])
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-8 p-4">
@@ -31,7 +40,7 @@ export default function Home() {
       </div>
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-900">NBA OBE Portal</h1>
-        <p className="text-gray-600 mt-2">Loading...</p>
+        <p className="text-gray-600">Loading...</p>
       </div>
     </div>
   )
