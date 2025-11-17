@@ -5,6 +5,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { 
   Dialog,
   DialogContent,
@@ -345,7 +346,6 @@ export default function StudentManagementPage() {
                   </SelectContent>
                 </Select>
               </div>
-              </div>
               <div>
                 <label className="text-sm font-medium">Batch</label>
                 <Select value={selectedBatch} onValueChange={setSelectedBatch}>
@@ -364,7 +364,6 @@ export default function StudentManagementPage() {
                   </SelectContent>
                 </Select>
               </div>
-              </div>
               <div>
                 <label className="text-sm font-medium">Section</label>
                 <Select value={selectedSection} onValueChange={setSelectedSection}>
@@ -382,7 +381,6 @@ export default function StudentManagementPage() {
                       ))}
                   </SelectContent>
                 </Select>
-              </div>
               </div>
               <div>
                 <label className="text-sm font-medium">Status</label>
@@ -553,7 +551,7 @@ export default function StudentManagementPage() {
                 </Select>
               </div>
             </div>
-            </DialogFooter>
+            <DialogFooter>
               <Button onClick={editingStudent ? handleUpdateStudent : handleAddStudent}>
                 {editingStudent ? 'Update Student' : 'Add Student'}
               </Button>
@@ -588,7 +586,6 @@ export default function StudentManagementPage() {
               <div className="text-sm text-gray-600">
                 Upload a file with columns: Register No, Name, Email, Status, Section
               </div>
-            </div>
             </div>
             <DialogFooter>
               <Button onClick={() => setUploadDialogOpen(false)}>

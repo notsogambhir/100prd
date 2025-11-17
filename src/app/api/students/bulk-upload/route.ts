@@ -84,7 +84,10 @@ async function getSectionIdByName(programName: string, batchName: string): Promi
       })
 
       return section?.id || null
-    } catch (error) {
+    }
+
+    return null
+  } catch (error) {
     console.error('Error finding section:', error)
     return null
   }

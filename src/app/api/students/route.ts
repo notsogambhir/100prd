@@ -143,7 +143,7 @@ export async function DELETE(
     if (!student) {
       return NextResponse.json(
         { message: 'Student not found' },
-        { { status: 404 }
+        { status: 404 }
       )
     }
 
