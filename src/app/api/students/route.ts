@@ -9,59 +9,35 @@ export async function GET(request: NextRequest) {
     const programId = searchParams.get('programId')
     const status = searchParams.get('status')
 
+    const whereClause: any = {}
+
+    if (sectionId) whereClause.sectionId = sectionId
+    if (batchId) whereClause.batchId = batchId
+    if (programId) whereClause.programId = programId
+    if (status) whereClause.status = status
+
     const students = await db.student.findMany({
-      where: {
-        ...(sectionId && { sectionId }),
-        ...(batchId && { section: { batchId } }),
-        ...(programId && { section: { batch: { programId } } }),
-        ...(status && { status })
-      },
+      where: whereClause,
       include: {
         section: {
           select: {
             name: true,
             batch: {
-              select: {
-                name: true,
-                program: {
-                  select: {
-                    name: true,
-                    code: true
-                  }
-                }
-              }
+              name: true
             }
-          }
-        },
-        enrollments: {
-          include: {
-            course: {
-              select: {
-                code: true,
-                name: true,
-                status: true
-              }
-            }
-          }
-        },
-        _count: {
-          select: {
-            enrollments: true,
-            marks: true
           }
         }
       },
-      orderBy: [
-        { rollNumber: 'asc' },
-        { name: 'asc' }
-      ]
+      orderBy: {
+        registerNo: 'asc'
+      }
     })
 
     return NextResponse.json(students)
   } catch (error) {
-    console.error('Failed to fetch students:', error)
+    console.error('Error fetching students:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch students' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -69,61 +45,131 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { name, email, rollNumber, sectionId, status = 'Active' } = body
+    const { registerNo, name, email, status, sectionId } = await request.json()
 
-    if (!name || !rollNumber) {
+    if (!registerNo || !name) {
       return NextResponse.json(
-        { error: 'Name and roll number are required' },
-        { status: 400 }
-      )
-    }
-
-    // Check for duplicate roll number
-    const existingStudent = await db.student.findUnique({
-      where: { rollNumber }
-    })
-
-    if (existingStudent) {
-      return NextResponse.json(
-        { error: 'Student with this roll number already exists' },
+        { message: 'Register number and name are required' },
         { status: 400 }
       )
     }
 
     const student = await db.student.create({
       data: {
+        registerNo,
         name,
-        email: email || null,
-        rollNumber,
-        sectionId: sectionId || null,
-        status
-      },
-      include: {
-        section: {
-          select: {
-            name: true,
-            batch: {
-              select: {
-                name: true,
-                program: {
-                  select: {
-                    name: true,
-                    code: true
-                  }
-                }
-              }
-            }
-          }
-        }
+        email,
+        status: status || 'ACTIVE',
+        sectionId: sectionId || null
       }
     })
 
     return NextResponse.json(student, { status: 201 })
   } catch (error) {
-    console.error('Failed to create student:', error)
+    console.error('Error creating student:', error)
     return NextResponse.json(
-      { error: 'Failed to create student' },
+      { message: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const id = params.id
+    const { registerNo, name, email, status, sectionId } = await request.json()
+
+    if (!id) {
+      return NextResponse.json(
+        { message: 'Student ID is required' },
+        { status: 400 }
+      )
+    }
+
+    const student = await db.student.findUnique({
+      where: { id }
+    })
+
+    if (!student) {
+      return NextResponse.json(
+        { message: 'Student not found' },
+        { status: 404 }
+      )
+    }
+
+    const updatedStudent = await db.student.update({
+      where: { id },
+      data: {
+        registerNo,
+        name,
+        email,
+        status,
+        sectionId
+      }
+    })
+
+    return NextResponse.json(updatedStudent)
+  } catch (error) {
+    console.error('Error updating student:', error)
+    return NextResponse.json(
+      { message: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const id = params.id
+
+    // Check if student exists and has associated data
+    const student = await db.student.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            marks: true
+          }
+        }
+      }
+    })
+
+    if (!student) {
+      return NextResponse.json(
+        { message: 'Student not found' },
+        { { status: 404 }
+      )
+    }
+
+    // Set sectionId to null for all students in this section
+    await db.student.updateMany({
+      where: {
+        sectionId: student.sectionId
+      },
+      data: {
+        sectionId: null
+      }
+    })
+
+    // Delete the student (cascade will handle related data)
+    await db.student.delete({
+      where: { id }
+    })
+
+    return NextResponse.json(
+      { message: 'Student deleted successfully' },
+      { status: 200 }
+    )
+  } catch (error) {
+    console.error('Error deleting student:', error)
+    return NextResponse.json(
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

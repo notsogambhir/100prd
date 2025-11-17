@@ -2,36 +2,23 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-import { Providers } from "@/components/providers";
+import { AuthProvider } from "@/contexts/AuthContext";
 
-const geist = Geist({
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
-  variable: "--font-geist",
 });
 
 const geistMono = Geist_Mono({
-  subsets: ["latin"],
   variable: "--font-geist-mono",
+  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "NBA OBE Portal - Outcome Based Education Management",
-  description: "Comprehensive web application for managing educational outcomes in accordance with NBA guidelines",
-  keywords: ["NBA", "OBE", "Education", "Accreditation", "Outcomes", "Assessment"],
+  title: "NBA OBE Portal",
+  description: "Outcome Based Education Management System for NBA Accreditation",
+  keywords: ["NBA", "OBE", "Education", "Accreditation", "Learning Outcomes"],
   authors: [{ name: "NBA OBE Team" }],
-  icons: {
-    icon: "/favicon.ico",
-  },
-  openGraph: {
-    title: "NBA OBE Portal",
-    description: "Comprehensive outcome based education management system",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "NBA OBE Portal",
-    description: "Comprehensive outcome based education management system",
-  },
 };
 
 export default function RootLayout({
@@ -41,11 +28,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geist.variable} ${geistMono.variable} antialiased`}>
-        <Providers>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+      >
+        <AuthProvider>
           {children}
           <Toaster />
-        </Providers>
+        </AuthProvider>
       </body>
     </html>
   );

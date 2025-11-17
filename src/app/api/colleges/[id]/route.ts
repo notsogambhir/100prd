@@ -1,32 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-export async function GET(
+export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const params = await context.params
+    const collegeId = params.id
+
+    // Check if college exists
     const college = await db.college.findUnique({
-      where: { id: params.id },
+      where: { id: collegeId },
       include: {
-        programs: {
-          include: {
-            _count: {
-              select: {
-                batches: true,
-                courses: true
-              }
-            }
-          }
-        },
-        users: {
+        _count: {
           select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            status: true
+            programs: true
           }
         }
       }
@@ -34,63 +22,24 @@ export async function GET(
 
     if (!college) {
       return NextResponse.json(
-        { error: 'College not found' },
+        { message: 'College not found' },
         { status: 404 }
       )
     }
 
-    return NextResponse.json(college)
-  } catch (error) {
-    console.error('Failed to fetch college:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch college' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function PUT(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const params = await context.params
-    const body = await request.json()
-    const { name, description } = body
-
-    const college = await db.college.update({
-      where: { id: params.id },
-      data: {
-        name,
-        description
-      }
-    })
-
-    return NextResponse.json(college)
-  } catch (error) {
-    console.error('Failed to update college:', error)
-    return NextResponse.json(
-      { error: 'Failed to update college' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const params = await context.params
+    // Delete the college (cascade will handle related records)
     await db.college.delete({
-      where: { id: params.id }
+      where: { id: collegeId }
     })
 
-    return NextResponse.json({ message: 'College deleted successfully' })
-  } catch (error) {
-    console.error('Failed to delete college:', error)
     return NextResponse.json(
-      { error: 'Failed to delete college' },
+      { message: 'College deleted successfully' },
+      { status: 200 }
+    )
+  } catch (error) {
+    console.error('Error deleting college:', error)
+    return NextResponse.json(
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

@@ -6,33 +6,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const courseId = searchParams.get('courseId')
 
-    const cos = await db.courseOutcome.findMany({
-      where: courseId ? { courseId } : {},
+    const courseOutcomes = await db.courseOutcome.findMany({
+      where: courseId ? { courseId } : undefined,
       include: {
         course: {
           select: {
             name: true,
             code: true
-          }
-        },
-        coPoMappings: {
-          include: {
-            po: {
-              select: {
-                code: true,
-                description: true
-              }
-            }
-          }
-        },
-        assessmentQuestions: {
-          select: {
-            id: true,
-            assessment: {
-              select: {
-                name: true
-              }
-            }
           }
         }
       },
@@ -41,11 +21,11 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(cos)
+    return NextResponse.json(courseOutcomes)
   } catch (error) {
-    console.error('Failed to fetch course outcomes:', error)
+    console.error('Error fetching course outcomes:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch course outcomes' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -53,25 +33,51 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { code, description, courseId } = body
+    const { code, description, courseId } = await request.json()
 
-    const co = await db.courseOutcome.create({
+    if (!code || !description || !courseId) {
+      return NextResponse.json(
+        { message: 'All fields are required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if CO with same code exists in this course
+    const existingCO = await db.courseOutcome.findFirst({
+      where: {
+        code,
+        courseId
+      }
+    })
+
+    if (existingCO) {
+      return NextResponse.json(
+        { message: 'Course outcome with this code already exists in this course' },
+        { status: 409 }
+      )
+    }
+
+    const courseOutcome = await db.courseOutcome.create({
       data: {
         code,
         description,
         courseId
       },
       include: {
-        course: true
+        course: {
+          select: {
+            name: true,
+            code: true
+          }
+        }
       }
     })
 
-    return NextResponse.json(co)
+    return NextResponse.json(courseOutcome, { status: 201 })
   } catch (error) {
-    console.error('Failed to create course outcome:', error)
+    console.error('Error creating course outcome:', error)
     return NextResponse.json(
-      { error: 'Failed to create course outcome' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

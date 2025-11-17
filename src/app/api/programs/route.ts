@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const collegeId = searchParams.get('collegeId')
-
     const programs = await db.program.findMany({
-      where: collegeId ? { collegeId } : {},
       include: {
         college: {
           select: {
             name: true
           }
         },
-        batches: {
+        _count: {
           select: {
-            id: true,
-            name: true,
-            startYear: true,
-            endYear: true
+            batches: true
           }
         }
       },
@@ -30,9 +23,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(programs)
   } catch (error) {
-    console.error('Failed to fetch programs:', error)
+    console.error('Error fetching programs:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch programs' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -40,28 +33,44 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { name, code, description, duration, collegeId, createdBy } = body
+    const { name, code, duration, collegeId } = await request.json()
+
+    if (!name || !code || !duration || !collegeId) {
+      return NextResponse.json(
+        { message: 'All fields are required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if program with same code exists in the same college
+    const existingProgram = await db.program.findFirst({
+      where: {
+        code,
+        collegeId
+      }
+    })
+
+    if (existingProgram) {
+      return NextResponse.json(
+        { message: 'Program with this code already exists in this college' },
+        { status: 409 }
+      )
+    }
 
     const program = await db.program.create({
       data: {
         name,
         code,
-        description,
-        duration,
-        collegeId,
-        createdBy
-      },
-      include: {
-        college: true
+        duration: parseInt(duration),
+        collegeId
       }
     })
 
-    return NextResponse.json(program)
+    return NextResponse.json(program, { status: 201 })
   } catch (error) {
-    console.error('Failed to create program:', error)
+    console.error('Error creating program:', error)
     return NextResponse.json(
-      { error: 'Failed to create program' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

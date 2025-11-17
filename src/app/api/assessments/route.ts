@@ -5,18 +5,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const courseId = searchParams.get('courseId')
-    const sectionId = searchParams.get('sectionId')
 
     const assessments = await db.assessment.findMany({
-      where: {
-        ...(courseId && { courseId }),
-        ...(sectionId && { sectionId })
-      },
+      where: courseId ? { courseId } : undefined,
       include: {
         course: {
           select: {
-            code: true,
-            name: true
+            name: true,
+            code: true
           }
         },
         section: {
@@ -24,25 +20,16 @@ export async function GET(request: NextRequest) {
             name: true
           }
         },
-        creator: {
-          select: {
-            name: true,
-            email: true
-          }
-        },
         questions: {
           include: {
             co: {
               select: {
-                code: true,
-                description: true
+                code: true
               }
             }
-          }
-        },
-        _count: {
-          select: {
-            marks: true
+          },
+          orderBy: {
+            questionName: 'asc'
           }
         }
       },
@@ -53,9 +40,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(assessments)
   } catch (error) {
-    console.error('Failed to fetch assessments:', error)
+    console.error('Error fetching assessments:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch assessments' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -63,28 +50,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { name, type, courseId, sectionId, createdBy } = body
+    const { name, type, courseId, sectionId } = await request.json()
 
-    if (!name || !type || !courseId || !sectionId || !createdBy) {
+    if (!name || !type || !courseId || !sectionId) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { message: 'All fields are required' },
         { status: 400 }
-      )
-    }
-
-    // Verify course exists and user has permission
-    const course = await db.course.findUnique({
-      where: { id: courseId },
-      include: {
-        program: true
-      }
-    })
-
-    if (!course) {
-      return NextResponse.json(
-        { error: 'Course not found' },
-        { status: 404 }
       )
     }
 
@@ -93,14 +64,13 @@ export async function POST(request: NextRequest) {
         name,
         type,
         courseId,
-        sectionId,
-        createdBy
+        sectionId
       },
       include: {
         course: {
           select: {
-            code: true,
-            name: true
+            name: true,
+            code: true
           }
         },
         section: {
@@ -113,9 +83,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(assessment, { status: 201 })
   } catch (error) {
-    console.error('Failed to create assessment:', error)
+    console.error('Error creating assessment:', error)
     return NextResponse.json(
-      { error: 'Failed to create assessment' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

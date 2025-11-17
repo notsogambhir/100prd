@@ -1,61 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const programId = searchParams.get('programId')
-    const batchId = searchParams.get('batchId')
-    const status = searchParams.get('status')
-
     const courses = await db.course.findMany({
-      where: {
-        ...(programId && { programId }),
-        ...(batchId && { batchId }),
-        ...(status && { status: status as any })
-      },
       include: {
         program: {
-          select: {
-            name: true,
-            code: true
-          }
-        },
-        batch: {
-          select: {
-            name: true,
-            startYear: true,
-            endYear: true
-          }
-        },
-        section: {
           select: {
             name: true
           }
         },
-        teacher: {
+        batch: {
           select: {
-            name: true,
-            email: true
+            name: true
           }
         },
-        cos: {
+        _count: {
           select: {
-            id: true,
-            code: true,
-            description: true
-          }
-        },
-        assessments: {
-          select: {
-            id: true,
-            name: true,
-            type: true
-          }
-        },
-        enrollments: {
-          select: {
-            id: true
+            courseOutcomes: true,
+            assessments: true
           }
         }
       },
@@ -66,9 +29,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(courses)
   } catch (error) {
-    console.error('Failed to fetch courses:', error)
+    console.error('Error fetching courses:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch courses' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -76,54 +39,63 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { 
-      code, 
-      name, 
-      description, 
-      credits, 
-      status, 
-      target, 
-      attainmentLevel1, 
-      attainmentLevel2, 
-      attainmentLevel3,
-      programId, 
-      batchId, 
-      sectionId, 
-      teacherId, 
-      createdBy 
-    } = body
+    const { code, name, credits, programId, batchId } = await request.json()
+
+    if (!code || !name || !credits || !programId || !batchId) {
+      return NextResponse.json(
+        { message: 'All fields are required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if course with same code exists in the same program
+    const existingCourse = await db.course.findFirst({
+      where: {
+        code,
+        programId
+      }
+    })
+
+    if (existingCourse) {
+      return NextResponse.json(
+        { message: 'Course with this code already exists in this program' },
+        { status: 409 }
+      )
+    }
 
     const course = await db.course.create({
       data: {
         code,
         name,
-        description,
-        credits,
-        status,
-        target: target || 60.0,
-        attainmentLevel1: attainmentLevel1 || 40.0,
-        attainmentLevel2: attainmentLevel2 || 60.0,
-        attainmentLevel3: attainmentLevel3 || 80.0,
+        credits: parseInt(credits),
         programId,
-        batchId,
-        sectionId,
-        teacherId,
-        createdBy
+        batchId
       },
       include: {
-        program: true,
-        batch: true,
-        section: true,
-        teacher: true
+        program: {
+          select: {
+            name: true
+          }
+        },
+        batch: {
+          select: {
+            name: true
+          }
+        },
+        _count: {
+          select: {
+            courseOutcomes: true,
+            assessments: true
+          }
+        }
       }
     })
 
-    return NextResponse.json(course)
+    return NextResponse.json(course, { status: 201 })
   } catch (error) {
-    console.error('Failed to create course:', error)
+    console.error('Error creating course:', error)
     return NextResponse.json(
-      { error: 'Failed to create course' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

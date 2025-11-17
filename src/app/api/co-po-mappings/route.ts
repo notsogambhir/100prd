@@ -5,46 +5,40 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const courseId = searchParams.get('courseId')
-    const coId = searchParams.get('coId')
-    const poId = searchParams.get('poId')
-
-    const where: any = {}
-    if (courseId) {
-      // Find all COs for this course, then get their mappings
-      const cos = await db.courseOutcome.findMany({
-        where: { courseId },
-        select: { id: true }
-      })
-      where.coId = { in: cos.map(co => co.id) }
-    }
-    if (coId) where.coId = coId
-    if (poId) where.poId = poId
 
     const mappings = await db.coPoMapping.findMany({
-      where,
+      where: courseId ? { courseId } : undefined,
       include: {
+        course: {
+          select: {
+            name: true,
+            code: true
+          }
+        },
         co: {
           select: {
-            id: true,
             code: true,
             description: true
           }
         },
         po: {
           select: {
-            id: true,
             code: true,
             description: true
           }
         }
-      }
+      },
+      orderBy: [
+        { co: { code: 'asc' } },
+        { po: { code: 'asc' } }
+      ]
     })
 
     return NextResponse.json(mappings)
   } catch (error) {
-    console.error('Failed to fetch CO-PO mappings:', error)
+    console.error('Error fetching CO-PO mappings:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch CO-PO mappings' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -52,35 +46,147 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { mappings } = body
+    const { courseId, coId, poId, level } = await request.json()
 
-    if (!mappings || !Array.isArray(mappings)) {
+    if (!courseId || !coId || !poId || level === undefined) {
       return NextResponse.json(
-        { error: 'Mappings array is required' },
+        { message: 'All fields are required' },
         { status: 400 }
       )
     }
 
-    // Delete existing mappings for the provided COs
-    const coIds = [...new Set(mappings.map(m => m.coId))]
-    await db.coPoMapping.deleteMany({
+    if (level < 0 || level > 3) {
+      return NextResponse.json(
+        { message: 'Level must be between 0 and 3' },
+        { status: 400 }
+      )
+    }
+
+    // Check if mapping already exists
+    const existingMapping = await db.coPoMapping.findUnique({
       where: {
-        coId: { in: coIds }
+        courseId_coId_poId: {
+          courseId,
+          coId,
+          poId
+        }
       }
     })
 
-    // Create new mappings
-    const result = await db.coPoMapping.createMany({
-      data: mappings.filter(m => m.level > 0), // Only create mappings with level > 0
-      skipDuplicates: true
+    if (existingMapping) {
+      // Update existing mapping
+      const updatedMapping = await db.coPoMapping.update({
+        where: { id: existingMapping.id },
+        data: { level },
+        include: {
+          course: {
+            select: {
+              name: true,
+              code: true
+            }
+          },
+          co: {
+            select: {
+              code: true,
+              description: true
+            }
+          },
+          po: {
+            select: {
+              code: true,
+              description: true
+            }
+          }
+        }
+      })
+
+      return NextResponse.json(updatedMapping)
+    } else {
+      // Create new mapping
+      const mapping = await db.coPoMapping.create({
+        data: {
+          courseId,
+          coId,
+          poId,
+          level
+        },
+        include: {
+          course: {
+            select: {
+              name: true,
+              code: true
+            }
+          },
+          co: {
+            select: {
+              code: true,
+              description: true
+            }
+          },
+          po: {
+            select: {
+              code: true,
+              description: true
+            }
+          }
+        }
+      })
+
+      return NextResponse.json(mapping, { status: 201 })
+    }
+  } catch (error) {
+    console.error('Error creating CO-PO mapping:', error)
+    return NextResponse.json(
+      { message: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const courseId = searchParams.get('courseId')
+    const coId = searchParams.get('coId')
+    const poId = searchParams.get('poId')
+
+    if (!courseId || !coId || !poId) {
+      return NextResponse.json(
+        { message: 'Course ID, CO ID, and PO ID are required' },
+        { status: 400 }
+      )
+    }
+
+    // Find and delete mapping
+    const existingMapping = await db.coPoMapping.findUnique({
+      where: {
+        courseId_coId_poId: {
+          courseId,
+          coId,
+          poId
+        }
+      }
     })
 
-    return NextResponse.json({ created: result.count })
-  } catch (error) {
-    console.error('Failed to create CO-PO mappings:', error)
+    if (!existingMapping) {
+      return NextResponse.json(
+        { message: 'Mapping not found' },
+        { status: 404 }
+      )
+    }
+
+    await db.coPoMapping.delete({
+      where: { id: existingMapping.id }
+    })
+
     return NextResponse.json(
-      { error: 'Failed to create CO-PO mappings' },
+      { message: 'CO-PO mapping deleted successfully' },
+      { status: 200 }
+    )
+  } catch (error) {
+    console.error('Error deleting CO-PO mapping:', error)
+    return NextResponse.json(
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

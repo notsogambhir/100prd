@@ -1,31 +1,31 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useMockSession } from '@/hooks/use-mock-session'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog'
 import { 
-  AlertDialog, 
-  AlertDialogAction, 
-  AlertDialogCancel, 
-  AlertDialogContent, 
-  AlertDialogDescription, 
-  AlertDialogFooter, 
-  AlertDialogHeader, 
-  AlertDialogTitle, 
-  AlertDialogTrigger 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { 
   Select,
@@ -35,91 +35,57 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { 
-  UserPlus, 
+  Plus, 
   Edit, 
   Trash2, 
+  Users, 
   Search,
-  Filter,
-  Loader2,
-  Building,
-  Mail,
-  Shield,
-  Users
+  Filter
 } from 'lucide-react'
 
 interface User {
   id: string
+  username: string
   email: string
   name: string
-  role: 'Admin' | 'University' | 'Department' | 'PC' | 'Teacher'
-  status: 'Active' | 'Inactive'
+  role: string
   collegeId?: string
   college?: {
     name: string
   }
   createdAt: string
-  updatedAt: string
 }
 
 interface College {
   id: string
   name: string
+  code: string
 }
 
-export default function UserManagement() {
-  const { session, status, isLoading } = useMockSession()
-  const router = useRouter()
+export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [colleges, setColleges] = useState<College[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [roleFilter, setRoleFilter] = useState<string>('')
-  const [collegeFilter, setCollegeFilter] = useState<string>('')
+  const [roleFilter, setRoleFilter] = useState<string>('all')
 
-  // Form state
+  // Form states
   const [userForm, setUserForm] = useState({
-    name: '',
+    username: '',
     email: '',
-    role: 'Teacher' as User['role'],
+    name: '',
+    role: '',
     collegeId: '',
-    status: 'Active' as User['status']
+    password: ''
   })
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+
+  // Dialog states
+  const [userDialogOpen, setUserDialogOpen] = useState(false)
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin')
-    }
-  }, [status, router])
-
-  useEffect(() => {
-    if (session?.user) {
-      fetchData()
-    }
-  }, [session])
-
-  useEffect(() => {
-    // Apply filters
-    let filtered = users
-
-    if (searchTerm) {
-      filtered = filtered.filter(user => 
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    if (roleFilter) {
-      filtered = filtered.filter(user => user.role === roleFilter)
-    }
-
-    if (collegeFilter) {
-      filtered = filtered.filter(user => user.collegeId === collegeFilter)
-    }
-
-    setFilteredUsers(filtered)
-  }, [users, searchTerm, roleFilter, collegeFilter])
+    fetchData()
+  }, [])
 
   const fetchData = async () => {
     try {
@@ -128,23 +94,16 @@ export default function UserManagement() {
         fetch('/api/colleges')
       ])
 
-      if (usersRes.ok) {
-        const usersData = await usersRes.json()
-        setUsers(usersData)
-      }
-
-      if (collegesRes.ok) {
-        const collegesData = await collegesRes.json()
-        setColleges(collegesData)
-      }
-      } finally {
-      if (usersLoading) {
-        setUsersLoading(false)
-      }
+      if (usersRes.ok) setUsers(await usersRes.json())
+      if (collegesRes.ok) setColleges(await collegesRes.json())
+    } catch (error) {
+      console.error('Error fetching data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleCreateUser = async () => {
+  const handleAddUser = async () => {
     try {
       const response = await fetch('/api/users', {
         method: 'POST',
@@ -153,19 +112,26 @@ export default function UserManagement() {
       })
 
       if (response.ok) {
-        await fetchData()
-        setUserForm({
-          name: '',
-          email: '',
-          role: 'Teacher',
-          collegeId: '',
-          status: 'Active'
-        })
-        setIsDialogOpen(false)
+        setUserDialogOpen(false)
+        resetForm()
+        fetchData()
       }
     } catch (error) {
-      console.error('Failed to create user:', error)
+      console.error('Error adding user:', error)
     }
+  }
+
+  const handleEditUser = (user: User) => {
+    setEditingUser(user)
+    setUserForm({
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      collegeId: user.collegeId || '',
+      password: ''
+    })
+    setUserDialogOpen(true)
   }
 
   const handleUpdateUser = async () => {
@@ -173,25 +139,19 @@ export default function UserManagement() {
 
     try {
       const response = await fetch(`/api/users/${editingUser.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userForm)
       })
 
       if (response.ok) {
-        await fetchData()
+        setUserDialogOpen(false)
+        resetForm()
         setEditingUser(null)
-        setUserForm({
-          name: '',
-          email: '',
-          role: 'Teacher',
-          collegeId: '',
-          status: 'Active'
-        })
-        setIsDialogOpen(false)
+        fetchData()
       }
     } catch (error) {
-      console.error('Failed to update user:', error)
+      console.error('Error updating user:', error)
     }
   }
 
@@ -202,228 +162,206 @@ export default function UserManagement() {
       })
 
       if (response.ok) {
-        await fetchData()
+        fetchData()
       }
     } catch (error) {
-      console.error('Failed to delete user:', error)
+      console.error('Error deleting user:', error)
     }
   }
 
-  const openEditDialog = (user: User) => {
-    setEditingUser(user)
+  const resetForm = () => {
     setUserForm({
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      collegeId: user.collegeId || '',
-      status: user.status
+      username: '',
+      email: '',
+      name: '',
+      role: '',
+      collegeId: '',
+      password: ''
     })
-    setIsDialogOpen(true)
   }
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'Admin': return 'bg-red-100 text-red-800'
-      case 'University': return 'bg-purple-100 text-purple-800'
-      case 'Department': return 'bg-blue-100 text-blue-800'
+      case 'ADMIN': return 'bg-red-100 text-red-800'
+      case 'UNIVERSITY': return 'bg-purple-100 text-purple-800'
+      case 'DEPARTMENT': return 'bg-blue-100 text-blue-800'
       case 'PC': return 'bg-green-100 text-green-800'
-      case 'Teacher': return 'bg-orange-100 text-orange-800'
+      case 'TEACHER': return 'bg-yellow-100 text-yellow-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
 
-  const getStatusColor = (status: string) => {
-    return status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'ADMIN': return 'Administrator'
+      case 'UNIVERSITY': return 'University'
+      case 'DEPARTMENT': return 'Department Head'
+      case 'PC': return 'Program Co-ordinator'
+      case 'TEACHER': return 'Teacher'
+      default: return role
+    }
   }
 
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.username.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesRole = roleFilter === 'all' || user.role === roleFilter
+    return matchesSearch && matchesRole
+  })
 
-  if (!session || session.user.role !== 'Admin') {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
-          <p className="text-gray-600 mt-2">You don't have permission to access this page.</p>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
         </div>
-      </div>
+      </DashboardLayout>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-          <p className="mt-2 text-gray-600">
-            Manage all user accounts and their permissions
-          </p>
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+            <p className="text-gray-600 mt-2">Manage system users and their roles</p>
+          </div>
+          <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { resetForm(); setEditingUser(null); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add User
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingUser ? 'Edit User' : 'Add New User'}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingUser ? 'Update user information' : 'Create a new user account'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    value={userForm.username}
+                    onChange={(e) => setUserForm(prev => ({ ...prev, username: e.target.value }))}
+                    placeholder="Enter username"
+                    disabled={!!editingUser}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={userForm.email}
+                    onChange={(e) => setUserForm(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="Enter email"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input
+                    id="name"
+                    value={userForm.name}
+                    onChange={(e) => setUserForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Enter full name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="role">Role</Label>
+                  <Select value={userForm.role} onValueChange={(value) => setUserForm(prev => ({ ...prev, role: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ADMIN">Administrator</SelectItem>
+                      <SelectItem value="UNIVERSITY">University</SelectItem>
+                      <SelectItem value="DEPARTMENT">Department Head</SelectItem>
+                      <SelectItem value="PC">Program Co-ordinator</SelectItem>
+                      <SelectItem value="TEACHER">Teacher</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {['DEPARTMENT', 'PC', 'TEACHER'].includes(userForm.role) && (
+                  <div>
+                    <Label htmlFor="college">College</Label>
+                    <Select value={userForm.collegeId} onValueChange={(value) => setUserForm(prev => ({ ...prev, collegeId: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select college" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {colleges.map((college) => (
+                          <SelectItem key={college.id} value={college.id}>
+                            {college.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {!editingUser && (
+                  <div>
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={userForm.password}
+                      onChange={(e) => setUserForm(prev => ({ ...prev, password: e.target.value }))}
+                      placeholder="Enter password"
+                    />
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button onClick={editingUser ? handleUpdateUser : handleAddUser}>
+                  {editingUser ? 'Update User' : 'Add User'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        {/* Filters and Search */}
-        <Card className="mb-6">
+        {/* Filters */}
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Filter className="h-5 w-5 mr-2" />
-              Filters & Search
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filters
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <Label htmlFor="search">Search</Label>
+            <div className="flex gap-4">
+              <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
-                    id="search"
-                    placeholder="Search by name or email..."
+                    placeholder="Search users..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
                   />
                 </div>
               </div>
-              <div>
-                <Label htmlFor="role-filter">Role</Label>
-                <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Roles" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All Roles</SelectItem>
-                    <SelectItem value="Admin">Admin</SelectItem>
-                    <SelectItem value="University">University</SelectItem>
-                    <SelectItem value="Department">Department</SelectItem>
-                    <SelectItem value="PC">Program Coordinator</SelectItem>
-                    <SelectItem value="Teacher">Teacher</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="college-filter">College</Label>
-                <Select value={collegeFilter} onValueChange={setCollegeFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Colleges" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All Colleges</SelectItem>
-                    {colleges.map((college) => (
-                      <SelectItem key={college.id} value={college.id}>
-                        {college.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-end">
-                <Dialog open={isDialogOpen} onOpenChange={(open) => {
-                  setIsDialogOpen(open)
-                  if (!open) {
-                    setEditingUser(null)
-                    setUserForm({
-                      name: '',
-                      email: '',
-                      role: 'Teacher',
-                      collegeId: '',
-                      status: 'Active'
-                    })
-                  }
-                }}>
-                  <DialogTrigger asChild>
-                    <Button className="w-full">
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Add New User
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>
-                        {editingUser ? 'Edit User' : 'Create New User'}
-                      </DialogTitle>
-                      <DialogDescription>
-                        {editingUser ? 'Update user information' : 'Add a new user to the system'}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="user-name">Name</Label>
-                        <Input
-                          id="user-name"
-                          value={userForm.name}
-                          onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
-                          placeholder="Enter user name"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="user-email">Email</Label>
-                        <Input
-                          id="user-email"
-                          type="email"
-                          value={userForm.email}
-                          onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                          placeholder="Enter email address"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="user-role">Role</Label>
-                        <Select value={userForm.role} onValueChange={(value) => setUserForm({ ...userForm, role: value as User['role'] })}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Admin">Admin</SelectItem>
-                            <SelectItem value="University">University</SelectItem>
-                            <SelectItem value="Department">Department</SelectItem>
-                            <SelectItem value="PC">Program Coordinator</SelectItem>
-                            <SelectItem value="Teacher">Teacher</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="user-college">College</Label>
-                        <Select value={userForm.collegeId} onValueChange={(value) => setUserForm({ ...userForm, collegeId: value })}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select college (optional)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="">No College</SelectItem>
-                            {colleges.map((college) => (
-                              <SelectItem key={college.id} value={college.id}>
-                                {college.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="user-status">Status</Label>
-                        <Select value={userForm.status} onValueChange={(value) => setUserForm({ ...userForm, status: value as User['status'] })}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Active">Active</SelectItem>
-                            <SelectItem value="Inactive">Inactive</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex justify-end space-x-2">
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button onClick={editingUser ? handleUpdateUser : handleCreateUser}>
-                          {editingUser ? 'Update User' : 'Create User'}
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Filter by role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="ADMIN">Administrator</SelectItem>
+                  <SelectItem value="UNIVERSITY">University</SelectItem>
+                  <SelectItem value="DEPARTMENT">Department Head</SelectItem>
+                  <SelectItem value="PC">Program Co-ordinator</SelectItem>
+                  <SelectItem value="TEACHER">Teacher</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
@@ -431,109 +369,69 @@ export default function UserManagement() {
         {/* Users List */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Users className="h-5 w-5 mr-2" />
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
               Users ({filteredUsers.length})
             </CardTitle>
-            <CardDescription>
-              All users in the system with their roles and permissions
-            </CardDescription>
+            <CardDescription>Manage all system users</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">User</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Role</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">College</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <div>
-                          <div className="font-medium">{user.name}</div>
-                          <div className="text-sm text-gray-500 flex items-center">
-                            <Mail className="h-3 w-3 mr-1" />
-                            {user.email}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <Badge className={getRoleColor(user.role)}>
-                          <Shield className="h-3 w-3 mr-1" />
-                          {user.role}
+            <div className="space-y-3">
+              {filteredUsers.map((user) => (
+                <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="font-medium">{user.name}</p>
+                        <p className="text-sm text-gray-600">@{user.username}</p>
+                        <p className="text-sm text-gray-600">{user.email}</p>
+                      </div>
+                      <Badge className={getRoleColor(user.role)}>
+                        {getRoleLabel(user.role)}
+                      </Badge>
+                      {user.college && (
+                        <Badge variant="outline">
+                          {user.college.name}
                         </Badge>
-                      </td>
-                      <td className="py-3 px-4">
-                        {user.college ? (
-                          <div className="flex items-center text-sm">
-                            <Building className="h-3 w-3 mr-1" />
-                            {user.college.name}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-sm">No College</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <Badge className={getStatusColor(user.status)}>
-                          {user.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditDialog(user)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete "{user.name}"? This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteUser(user.id)}>
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              
-              {filteredUsers.length === 0 && (
-                <div className="text-center py-8">
-                  <Users className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Try adjusting your search or filters
-                  </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleEditUser(user)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete User</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete {user.name}? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDeleteUser(user.id)}>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </CardContent>
         </Card>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }

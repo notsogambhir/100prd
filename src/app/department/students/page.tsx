@@ -1,13 +1,30 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { 
   Select,
   SelectContent,
@@ -16,75 +33,48 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
-} from '@/components/ui/dialog'
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { 
-  AlertDialog, 
-  AlertDialogAction, 
-  AlertDialogCancel, 
-  AlertDialogContent, 
-  AlertDialogDescription, 
-  AlertDialogFooter, 
-  AlertDialogHeader, 
-  AlertDialogTitle, 
-  AlertDialogTrigger 
-} from '@/components/ui/alert-dialog'
-import { 
-  Users, 
   Plus, 
   Edit, 
   Trash2, 
+  Users, 
+  GraduationCap,
   Search,
   Filter,
   Upload,
-  Download,
-  CheckCircle,
-  Clock,
-  Loader2,
-  UserPlus,
-  GraduationCap
+  Download
 } from 'lucide-react'
 
 interface Student {
   id: string
+  registerNo: string
   name: string
   email?: string
-  rollNumber: string
   status: string
   sectionId?: string
   section?: {
     name: string
     batch: {
       name: string
-      program: {
-        name: string
-        code: string
-      }
     }
   }
-  enrollments: Array<{
-    id: string
-    course: {
-      code: string
-      name: string
-      status: string
-    }
-  }>
-  _count: {
-    enrollments: number
-    marks: number
-  }
+  createdAt: string
 }
 
-interface Program {
+interface Section {
   id: string
   name: string
-  code: string
+  batchId: string
+  batch: {
+    name: string
+  }
 }
 
 interface Batch {
@@ -94,136 +84,64 @@ interface Batch {
   endYear: number
 }
 
-interface Section {
+interface Program {
   id: string
   name: string
+  code: string
 }
 
-export default function DepartmentStudents() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-
+export default function StudentManagementPage() {
   const [students, setStudents] = useState<Student[]>([])
-  const [programs, setPrograms] = useState<Program[]>([])
-  const [batches, setBatches] = useState<Batch[]>([])
   const [sections, setSections] = useState<Section[]>([])
-  const [filteredStudents, setFilteredStudents] = useState<Student[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingStudent, setEditingStudent] = useState<Student | null>(null)
+  const [batches, setBatches] = useState<Batch[]>([])
+  const [programs, setPrograms] = useState<Program[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [selectedProgram, setSelectedProgram] = useState<string>('')
   const [selectedBatch, setSelectedBatch] = useState<string>('')
   const [selectedSection, setSelectedSection] = useState<string>('')
 
-  // Form state
+  // Form states
   const [studentForm, setStudentForm] = useState({
+    registerNo: '',
     name: '',
     email: '',
-    rollNumber: '',
-    sectionId: '',
-    status: 'Active'
+    status: 'ACTIVE',
+    sectionId: ''
   })
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null)
+  const [studentDialogOpen, setStudentDialogOpen] = useState(false)
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+
+  // Dialog states
+  const [userDialogOpen, setUserDialogOpen] = useState(false)
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin')
-    }
-  }, [status, router])
-
-  useEffect(() => {
-    if (session?.user) {
-      fetchData()
-    }
-  }, [session])
-
-  useEffect(() => {
-    // Apply filters
-    let filtered = students
-
-    if (searchTerm) {
-      filtered = filtered.filter(student => 
-        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.email?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    if (statusFilter) {
-      filtered = filtered.filter(student => student.status === statusFilter)
-    }
-
-    if (selectedProgram) {
-      filtered = filtered.filter(student => 
-        student.section?.batch.programId === selectedProgram
-      )
-    }
-
-    if (selectedBatch) {
-      filtered = filtered.filter(student => 
-        student.section?.batchId === selectedBatch
-      )
-    }
-
-    if (selectedSection) {
-      filtered = filtered.filter(student => 
-        student.sectionId === selectedSection
-      )
-    }
-
-    setFilteredStudents(filtered)
-  }, [students, searchTerm, statusFilter, selectedProgram, selectedBatch, selectedSection])
+    fetchData()
+  }, [])
 
   const fetchData = async () => {
     try {
-      const [studentsRes, programsRes, batchesRes, sectionsRes] = await Promise.all([
+      const [studentsRes, sectionsRes, batchesRes, programsRes] = await Promise.all([
         fetch('/api/students'),
-        fetch('/api/programs'),
+        fetch('/api/sections'),
         fetch('/api/batches'),
-        fetch('/api/sections')
+        fetch('/api/programs')
       ])
 
-      if (studentsRes.ok) {
-        const studentsData = await studentsRes.json()
-        // Filter students based on user role and college
-        let filteredStudents = studentsData
-        if (session?.user?.role === 'Department') {
-          filteredStudents = studentsData.filter((student: Student) => 
-            student.section?.batch.program.collegeId === session.user.collegeId
-          )
-        }
-        setStudents(filteredStudents)
-      }
-
-      if (programsRes.ok) {
-        const programsData = await programsRes.json()
-        let filteredPrograms = programsData
-        if (session?.user?.role === 'Department') {
-          filteredPrograms = programsData.filter((program: Program) => 
-            program.collegeId === session.user.collegeId
-          )
-        }
-        setPrograms(filteredPrograms)
-      }
-
-      if (batchesRes.ok) {
-        const batchesData = await batchesRes.json()
-        setBatches(batchesData)
-      }
-
-      if (sectionsRes.ok) {
-        const sectionsData = await sectionsRes.json()
-        setSections(sectionsData)
-      }
+      if (studentsRes.ok) setStudents(await studentsRes.json())
+      if (sectionsRes.ok) setSections(await sectionsRes.json())
+      if (batchesRes.ok) setBatches(await batchesRes.json())
+      if (programsRes.ok) setPrograms(await programsRes.json())
     } catch (error) {
-      console.error('Failed to fetch data:', error)
+      console.error('Error fetching data:', error)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const handleCreateStudent = async () => {
+  const handleAddStudent = async () => {
     try {
       const response = await fetch('/api/students', {
         method: 'POST',
@@ -232,19 +150,25 @@ export default function DepartmentStudents() {
       })
 
       if (response.ok) {
-        await fetchData()
-        setStudentForm({
-          name: '',
-          email: '',
-          rollNumber: '',
-          sectionId: '',
-          status: 'Active'
-        })
-        setIsDialogOpen(false)
+        setStudentDialogOpen(false)
+        resetStudentForm()
+        fetchData()
       }
     } catch (error) {
-      console.error('Failed to create student:', error)
+      console.error('Error adding student:', error)
     }
+  }
+
+  const handleEditStudent = (student: Student) => {
+    setEditingStudent(student)
+    setStudentForm({
+      registerNo: student.registerNo,
+      name: student.name,
+      email: student.email || '',
+      status: student.status,
+      sectionId: student.sectionId || ''
+    })
+    setStudentDialogOpen(true)
   }
 
   const handleUpdateStudent = async () => {
@@ -252,39 +176,33 @@ export default function DepartmentStudents() {
 
     try {
       const response = await fetch(`/api/students/${editingStudent.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(studentForm)
       })
 
       if (response.ok) {
-        await fetchData()
+        setStudentDialogOpen(false)
+        resetStudentForm()
         setEditingStudent(null)
-        setStudentForm({
-          name: '',
-          email: '',
-          rollNumber: '',
-          sectionId: '',
-          status: 'Active'
-        })
-        setIsDialogOpen(false)
+        fetchData()
       }
     } catch (error) {
-      console.error('Failed to update student:', error)
+      console.error('Error updating student:', error)
     }
   }
 
-  const handleDeleteStudent = async (studentId: string) => {
+  const handleDeleteStudent = async (id: string) => {
     try {
-      const response = await fetch(`/api/students/${studentId}`, {
+      const response = await fetch(`/api/students/${id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
-        await fetchData()
+        fetchData()
       }
     } catch (error) {
-      console.error('Failed to delete student:', error)
+      console.error('Error deleting student:', error)
     }
   }
 
@@ -294,186 +212,128 @@ export default function DepartmentStudents() {
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('type', 'students')
 
-    fetch('/api/bulk-upload', {
-      method: 'POST',
-      body: formData
-    })
-      .then(response => response.json())
-      .then(data => {
-        if (data.successful > 0) {
-          alert(`Successfully uploaded ${data.successful} students!`)
-          fetchData()
-        } else {
-          alert(`Upload completed with ${data.errors} errors. Check console for details.`)
-        }
-        console.log('Upload result:', data)
+    try {
+      const response = await fetch('/api/students/bulk-upload', {
+        method: 'POST',
+        body: formData
       })
-      .catch(error => {
-        console.error('Error uploading students:', error)
-        alert('Error uploading students')
-      })
+
+      if (response.ok) {
+        setUploadDialogOpen(false)
+        fetchData()
+        alert('Students uploaded successfully!')
+      } else {
+        alert('Upload failed. Please check the file format.')
+      }
+    } catch (error) {
+      console.error('Error uploading students:', error)
+      alert('Upload failed. Please try again.')
+    }
   }
 
-  const openEditDialog = (student: Student) => {
-    setEditingStudent(student)
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await fetch('/api/students/template')
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'student-template.xlsx'
+        a.click()
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (error) {
+      console.error('Error downloading template:', error)
+      alert('Failed to download template')
+    }
+  }
+
+  const resetStudentForm = () => {
     setStudentForm({
-      name: student.name,
-      email: student.email || '',
-      rollNumber: student.rollNumber,
-      sectionId: student.sectionId || '',
-      status: student.status
+      registerNo: '',
+      name: '',
+      email: '',
+      status: 'ACTIVE',
+      sectionId: ''
     })
-    setIsDialogOpen(true)
   }
 
   const getStatusColor = (status: string) => {
-    return status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+    switch (status) {
+      case 'ACTIVE': return 'bg-green-100 text-green-800'
+      case 'INACTIVE': return 'bg-gray-100 text-gray-800'
+      case 'GRADUATED': return 'bg-blue-100 text-blue-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
   }
 
-  const getStatusIcon = (status: string) => {
-    return status === 'Active' ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'ACTIVE': return 'Active'
+      case 'INACTIVE': return 'Inactive'
+      case 'GRADUATED': return 'Graduated'
+      default: return status
+    }
   }
 
-  if (status === 'loading' || isLoading) {
+  const filteredStudents = students.filter(student => {
+    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         student.registerNo.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || student.status === statusFilter
+    const matchesProgram = !selectedProgram || student.section?.batch?.programId === selectedProgram
+    const matchesBatch = !selectedBatch || student.section?.batchId === selectedBatch
+    const matchesSection = !selectedSection || student.sectionId === selectedSection
+    return matchesSearch && matchesStatus && matchesProgram && matchesBatch && matchesSection
+  })
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
-
-  if (!session || (session.user.role !== 'Department' && session.user.role !== 'Admin')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
-          <p className="text-gray-600 mt-2">You don't have permission to access this page.</p>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
         </div>
-      </div>
+      </DashboardLayout>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Student Management</h1>
-          <p className="mt-2 text-gray-600">
-            Manage student records and enrollments
-            {session.user.role === 'Department' && ' in your department'}
-          </p>
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Student Management</h1>
+            <p className="text-gray-600 mt-2">Manage student enrollment and sections</p>
+          </div>
+          <div className="flex gap-2">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Student
+            </Button>
+            <Button onClick={() => setUploadDialogOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Bulk Upload
+            </Button>
+            <Button onClick={handleDownloadTemplate}>
+              <Download className="h-4 w-4 mr-2" />
+              Download Template
+            </Button>
+          </div>
         </div>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-3 rounded-full bg-blue-500">
-                  <Users className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Students</p>
-                  <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-3 rounded-full bg-green-500">
-                  <CheckCircle className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Active Students</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {students.filter(s => s.status === 'Active').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-3 rounded-full bg-purple-500">
-                  <GraduationCap className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Enrollments</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {students.reduce((sum, student) => sum + student._count.enrollments, 0)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-3 rounded-full bg-orange-500">
-                  <Users className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Sections</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {new Set(students.map(s => s.sectionId).filter(Boolean)).size}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search and Filters */}
-        <Card className="mb-6">
+        {/* Filters */}
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Search className="h-5 w-5 mr-2" />
-              Search & Filters
-            </CardTitle>
+            <CardTitle>Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <Label htmlFor="search">Search</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="search"
-                    placeholder="Search by name, roll number, or email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="status-filter">Status</Label>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All Statuses</SelectItem>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="program-filter">Program</Label>
+                <label className="text-sm font-medium">Program</label>
                 <Select value={selectedProgram} onValueChange={setSelectedProgram}>
                   <SelectTrigger>
-                    <SelectValue placeholder="All Programs" />
+                    <SelectValue placeholder="Select program" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">All Programs</SelectItem>
@@ -485,12 +345,12 @@ export default function DepartmentStudents() {
                   </SelectContent>
                 </Select>
               </div>
-
+              </div>
               <div>
-                <Label htmlFor="batch-filter">Batch</Label>
+                <label className="text-sm font-medium">Batch</label>
                 <Select value={selectedBatch} onValueChange={setSelectedBatch}>
                   <SelectTrigger>
-                    <SelectValue placeholder="All Batches" />
+                    <SelectValue placeholder="Select batch" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">All Batches</SelectItem>
@@ -504,17 +364,17 @@ export default function DepartmentStudents() {
                   </SelectContent>
                 </Select>
               </div>
-
+              </div>
               <div>
-                <Label htmlFor="section-filter">Section</Label>
+                <label className="text-sm font-medium">Section</label>
                 <Select value={selectedSection} onValueChange={setSelectedSection}>
                   <SelectTrigger>
-                    <SelectValue placeholder="All Sections" />
+                    <SelectValue placeholder="Select section" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">All Sections</SelectItem>
                     {sections
-                      .filter(section => !selectedBatch || section.batchId === selectedBatch)
+                      .filter(section => !selectedProgram || !selectedBatch || section.batchId === selectedBatch)
                       .map((section) => (
                         <SelectItem key={section.id} value={section.id}>
                           {section.name}
@@ -523,202 +383,76 @@ export default function DepartmentStudents() {
                   </SelectContent>
                 </Select>
               </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Status</label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="ACTIVE">Active</SelectItem>
+                    <SelectItem value="INACTIVE">Inactive</SelectItem>
+                    <SelectItem value="GRADUATED">Graduated</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search students..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Actions */}
-        <div className="mb-6 flex justify-between">
-          <div className="flex gap-2">
-            <Button variant="outline">
-              <Upload className="h-4 w-4 mr-2" />
-              Bulk Upload
-            </Button>
-            <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-          </div>
-          
-          <Dialog open={isDialogOpen} onOpenChange={(open) => {
-            setIsDialogOpen(open)
-            if (!open) {
-              setEditingStudent(null)
-              setStudentForm({
-                name: '',
-                email: '',
-                rollNumber: '',
-                sectionId: '',
-                status: 'Active'
-              })
-            }
-          }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Student
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>
-                  {editingStudent ? 'Edit Student' : 'Add New Student'}
-                </DialogTitle>
-                <DialogDescription>
-                  {editingStudent ? 'Update student information' : 'Add a new student to the system'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="student-name">Name</Label>
-                    <Input
-                      id="student-name"
-                      value={studentForm.name}
-                      onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
-                      placeholder="Student full name"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="student-roll">Roll Number</Label>
-                    <Input
-                      id="student-roll"
-                      value={studentForm.rollNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, rollNumber: e.target.value })}
-                      placeholder="e.g., BE25CS001"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <Label htmlFor="student-email">Email</Label>
-                  <Input
-                    id="student-email"
-                    type="email"
-                    value={studentForm.email}
-                    onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-                    placeholder="student@email.com"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="student-section">Section</Label>
-                    <Select value={studentForm.sectionId} onValueChange={(value) => setStudentForm({ ...studentForm, sectionId: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select section" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sections.map((section) => (
-                          <SelectItem key={section.id} value={section.id}>
-                            {section.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="student-status">Status</Label>
-                    <Select value={studentForm.status} onValueChange={(value: 'Active' | 'Inactive') => setStudentForm({ ...studentForm, status: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 mt-6">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={editingStudent ? handleUpdateStudent : handleCreateStudent}>
-                  {editingStudent ? 'Update' : 'Create'} Student
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* Students List */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">
+        {/* Students Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5" />
               Students ({filteredStudents.length})
-            </h3>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Roll Number
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Section
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Enrollments
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Register No</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Section</TableHead>
+                  <TableHead>Batch</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {filteredStudents.map((student) => (
-                  <tr key={student.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{student.rollNumber}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{student.name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{student.email || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {student.section?.name || '-'}
-                      </div>
-                      {student.section && (
-                        <div className="text-xs text-gray-500">
-                          {student.section.batch.name}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <TableRow key={student.id}>
+                    <TableCell className="font-medium">{student.registerNo}</TableCell>
+                    <TableCell>{student.name}</TableCell>
+                    <TableCell>{student.email || 'N/A'}</TableCell>
+                    <TableCell>
                       <Badge className={getStatusColor(student.status)}>
-                        <span className="flex items-center gap-1">
-                          {getStatusIcon(student.status)}
-                          {student.status}
-                        </span>
+                        {getStatusLabel(student.status)}
                       </Badge>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {student._count.enrollments} courses
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex gap-2">
+                    </TableCell>
+                    <TableCell>{student.section?.name || 'N/A'}</TableCell>
+                    <TableCell>{student.section?.batch?.name || 'N/A'}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => openEditDialog(student)}
+                          onClick={() => handleEditStudent(student)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -732,7 +466,7 @@ export default function DepartmentStudents() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Student</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete "{student.name}" ({student.rollNumber})? This will also remove all enrollments and marks.
+                                Are you sure you want to delete {student.name}? This action cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -744,29 +478,129 @@ export default function DepartmentStudents() {
                           </AlertDialogContent>
                         </AlertDialog>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-        {filteredStudents.length === 0 && (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No students found</h3>
-              <p className="text-gray-500">
-                {searchTerm || statusFilter || selectedProgram || selectedBatch || selectedSection
-                  ? 'No students match the current filters.'
-                  : 'No students have been added to the system yet.'
-                }
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Student Dialog */}
+        <Dialog open={studentDialogOpen} onOpenChange={setStudentDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {editingStudent ? 'Edit Student' : 'Add New Student'}
+              </DialogTitle>
+              <DialogDescription>
+                {editingStudent ? 'Update student information' : 'Add a new student to the system'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Register No</label>
+                <Input
+                  value={studentForm.registerNo}
+                  onChange={(e) => setStudentForm(prev => ({ ...prev, registerNo: e.target.value }))}
+                  disabled={!!editingStudent}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Full Name</label>
+                <Input
+                  value={studentForm.name}
+                  onChange={(e) => setStudentForm(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  type="email"
+                  value={studentForm.email}
+                  onChange={(e) => setStudentForm(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Status</label>
+                <Select value={studentForm.status} onValueChange={(value) => setStudentForm(prev => ({ ...prev, status: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Active</SelectItem>
+                    <SelectItem value="INACTIVE">Inactive</SelectItem>
+                    <SelectItem value="GRADUATED">Graduated</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Section</label>
+                <Select value={studentForm.sectionId} onValueChange={(value) => setStudentForm(prev => ({ ...prev, sectionId: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Sections</SelectItem>
+                    {sections
+                      .filter(section => !selectedProgram || !selectedBatch || section.batchId === selectedBatch)
+                      .map((section) => (
+                        <SelectItem key={section.id} value={section.id}>
+                          {section.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            </DialogFooter>
+              <Button onClick={editingStudent ? handleUpdateStudent : handleAddStudent}>
+                {editingStudent ? 'Update Student' : 'Add Student'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Upload Dialog */}
+        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Bulk Upload Students</DialogTitle>
+              <DialogDescription>
+                Upload student data from an Excel file
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Excel File</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      console.log('Selected file:', file.name)
+                    }
+                  }}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+              <div className="text-sm text-gray-600">
+                Upload a file with columns: Register No, Name, Email, Status, Section
+              </div>
+            </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setUploadDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleBulkUpload}>
+                Upload
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }

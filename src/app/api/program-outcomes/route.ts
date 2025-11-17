@@ -6,29 +6,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const programId = searchParams.get('programId')
 
-    const pos = await db.programOutcome.findMany({
-      where: programId ? { programId } : {},
+    const programOutcomes = await db.programOutcome.findMany({
+      where: programId ? { programId } : undefined,
       include: {
         program: {
           select: {
             name: true,
             code: true
-          }
-        },
-        coPoMappings: {
-          include: {
-            co: {
-              select: {
-                code: true,
-                description: true,
-                course: {
-                  select: {
-                    name: true,
-                    code: true
-                  }
-                }
-              }
-            }
           }
         }
       },
@@ -37,11 +21,11 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(pos)
+    return NextResponse.json(programOutcomes)
   } catch (error) {
-    console.error('Failed to fetch program outcomes:', error)
+    console.error('Error fetching program outcomes:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch program outcomes' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -49,26 +33,51 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { code, description, programId, indirectAttainment } = body
+    const { code, description, programId } = await request.json()
 
-    const po = await db.programOutcome.create({
-      data: {
+    if (!code || !description || !programId) {
+      return NextResponse.json(
+        { message: 'All fields are required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if PO with same code exists in this program
+    const existingPO = await db.programOutcome.findFirst({
+      where: {
         code,
-        description,
-        programId,
-        indirectAttainment: indirectAttainment || 3.0
-      },
-      include: {
-        program: true
+        programId
       }
     })
 
-    return NextResponse.json(po)
+    if (existingPO) {
+      return NextResponse.json(
+        { message: 'Program outcome with this code already exists in this program' },
+        { status: 409 }
+      )
+    }
+
+    const programOutcome = await db.programOutcome.create({
+      data: {
+        code,
+        description,
+        programId
+      },
+      include: {
+        program: {
+          select: {
+            name: true,
+            code: true
+          }
+        }
+      }
+    })
+
+    return NextResponse.json(programOutcome, { status: 201 })
   } catch (error) {
-    console.error('Failed to create program outcome:', error)
+    console.error('Error creating program outcome:', error)
     return NextResponse.json(
-      { error: 'Failed to create program outcome' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

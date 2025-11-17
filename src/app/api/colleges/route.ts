@@ -7,8 +7,7 @@ export async function GET() {
       include: {
         _count: {
           select: {
-            programs: true,
-            users: true
+            programs: true
           }
         }
       },
@@ -19,9 +18,9 @@ export async function GET() {
 
     return NextResponse.json(colleges)
   } catch (error) {
-    console.error('Failed to fetch colleges:', error)
+    console.error('Error fetching colleges:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch colleges' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -29,22 +28,39 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { name, description, createdBy } = body
+    const { name, code } = await request.json()
+
+    if (!name || !code) {
+      return NextResponse.json(
+        { message: 'Name and code are required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if college with same code already exists
+    const existingCollege = await db.college.findUnique({
+      where: { code }
+    })
+
+    if (existingCollege) {
+      return NextResponse.json(
+        { message: 'College with this code already exists' },
+        { status: 409 }
+      )
+    }
 
     const college = await db.college.create({
       data: {
         name,
-        description,
-        createdBy
+        code
       }
     })
 
-    return NextResponse.json(college)
+    return NextResponse.json(college, { status: 201 })
   } catch (error) {
-    console.error('Failed to create college:', error)
+    console.error('Error creating college:', error)
     return NextResponse.json(
-      { error: 'Failed to create college' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

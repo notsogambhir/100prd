@@ -6,18 +6,8 @@ export async function GET() {
     const batches = await db.batch.findMany({
       include: {
         program: {
-          include: {
-            college: {
-              select: {
-                name: true
-              }
-            }
-          }
-        },
-        _count: {
           select: {
-            sections: true,
-            courses: true
+            name: true
           }
         }
       },
@@ -28,9 +18,9 @@ export async function GET() {
 
     return NextResponse.json(batches)
   } catch (error) {
-    console.error('Failed to fetch batches:', error)
+    console.error('Error fetching batches:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch batches' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -38,31 +28,59 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { name, startYear, endYear, programId, createdBy } = body
+    const { programId, startYear } = await request.json()
 
-    const batch = await db.batch.create({
-      data: {
-        name,
-        startYear,
-        endYear,
+    if (!programId || !startYear) {
+      return NextResponse.json(
+        { message: 'Program and start year are required' },
+        { status: 400 }
+      )
+    }
+
+    // Get program to calculate duration
+    const program = await db.program.findUnique({
+      where: { id: programId }
+    })
+
+    if (!program) {
+      return NextResponse.json(
+        { message: 'Program not found' },
+        { status: 404 }
+      )
+    }
+
+    const endYear = startYear + program.duration
+    const batchName = `${startYear}-${endYear}`
+
+    // Check if batch already exists
+    const existingBatch = await db.batch.findFirst({
+      where: {
         programId,
-        createdBy
-      },
-      include: {
-        program: {
-          include: {
-            college: true
-          }
-        }
+        name: batchName
       }
     })
 
-    return NextResponse.json(batch)
+    if (existingBatch) {
+      return NextResponse.json(
+        { message: 'Batch already exists for this program and year' },
+        { status: 409 }
+      )
+    }
+
+    const batch = await db.batch.create({
+      data: {
+        name: batchName,
+        startYear: parseInt(startYear),
+        endYear,
+        programId
+      }
+    })
+
+    return NextResponse.json(batch, { status: 201 })
   } catch (error) {
-    console.error('Failed to create batch:', error)
+    console.error('Error creating batch:', error)
     return NextResponse.json(
-      { error: 'Failed to create batch' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

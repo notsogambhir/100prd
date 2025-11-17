@@ -1,34 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import bcrypt from 'bcryptjs'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const role = searchParams.get('role')
-    const collegeId = searchParams.get('collegeId')
-
     const users = await db.user.findMany({
-      where: {
-        ...(role && { role }),
-        ...(collegeId && { collegeId })
-      },
       include: {
         college: {
           select: {
             name: true
-          }
-        },
-        managedPrograms: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        assignedCourses: {
-          select: {
-            id: true,
-            name: true,
-            code: true
           }
         }
       },
@@ -37,17 +17,14 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Remove passwords from response
-    const usersWithoutPasswords = users.map(user => {
-      const { password, ...userWithoutPassword } = user
-      return userWithoutPassword
-    })
+    // Remove password from response
+    const usersWithoutPassword = users.map(({ password, ...user }) => user)
 
-    return NextResponse.json(usersWithoutPasswords)
+    return NextResponse.json(usersWithoutPassword)
   } catch (error) {
-    console.error('Failed to fetch users:', error)
+    console.error('Error fetching users:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch users' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -55,32 +32,61 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { email, name, role, collegeId, status } = body
+    const { username, email, name, role, collegeId, password } = await request.json()
 
-    // For demo purposes, use plain text password
+    if (!username || !email || !name || !role || !password) {
+      return NextResponse.json(
+        { message: 'All required fields must be provided' },
+        { status: 400 }
+      )
+    }
+
+    // Check if user with same username or email already exists
+    const existingUser = await db.user.findFirst({
+      where: {
+        OR: [
+          { username },
+          { email }
+        ]
+      }
+    })
+
+    if (existingUser) {
+      return NextResponse.json(
+        { message: 'User with this username or email already exists' },
+        { status: 409 }
+      )
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10)
+
     const user = await db.user.create({
       data: {
+        username,
         email,
-        password: 'password', // Default password for demo
         name,
         role,
-        collegeId,
-        status: status || 'Active'
+        collegeId: collegeId || null,
+        password: hashedPassword
       },
       include: {
-        college: true
+        college: {
+          select: {
+            name: true
+          }
+        }
       }
     })
 
     // Remove password from response
-    const { password, ...userWithoutPassword } = user
+    const { password: _, ...userWithoutPassword } = user
 
-    return NextResponse.json(userWithoutPassword)
+    return NextResponse.json(userWithoutPassword, { status: 201 })
   } catch (error) {
-    console.error('Failed to create user:', error)
+    console.error('Error creating user:', error)
     return NextResponse.json(
-      { error: 'Failed to create user' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

@@ -1,80 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import bcrypt from 'bcryptjs'
 
-export async function GET(
+export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const params = await context.params
-    const user = await db.user.findUnique({
-      where: { id: params.id },
-      include: {
-        college: {
-          select: {
-            name: true
-          }
-        },
-        managedPrograms: {
-          select: {
-            name: true,
-            code: true
-          }
-        },
-        assignedCourses: {
-          select: {
-            code: true,
-            name: true
-          }
-        },
-        teacherToPcs: {
-          include: {
-            pc: {
-              select: {
-                name: true,
-                email: true
-              }
-            }
-          }
-        }
-      }
+    const userId = params.id
+    const { username, email, name, role, collegeId, password } = await request.json()
+
+    // Check if user exists
+    const existingUser = await db.user.findUnique({
+      where: { id: userId }
     })
 
-    if (!user) {
+    if (!existingUser) {
       return NextResponse.json(
-        { error: 'User not found' },
+        { message: 'User not found' },
         { status: 404 }
       )
     }
 
-    return NextResponse.json(user)
-  } catch (error) {
-    console.error('Failed to fetch user:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch user' },
-      { status: 500 }
-    )
-  }
-}
+    // Check if username or email is taken by another user
+    if (username !== existingUser.username || email !== existingUser.email) {
+      const duplicateUser = await db.user.findFirst({
+        where: {
+          OR: [
+            { username },
+            { email }
+          ],
+          NOT: {
+            id: userId
+          }
+        }
+      })
 
-export async function PUT(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const params = await context.params
-    const body = await request.json()
-    const { name, email, role, status, collegeId } = body
+      if (duplicateUser) {
+        return NextResponse.json(
+          { message: 'Username or email already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      username,
+      email,
+      name,
+      role,
+      collegeId: collegeId || null
+    }
+
+    // Add password if provided
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10)
+    }
 
     const user = await db.user.update({
-      where: { id: params.id },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(email !== undefined && { email }),
-        ...(role !== undefined && { role }),
-        ...(status !== undefined && { status }),
-        ...(collegeId !== undefined && { collegeId })
-      },
+      where: { id: userId },
+      data: updateData,
       include: {
         college: {
           select: {
@@ -84,11 +70,14 @@ export async function PUT(
       }
     })
 
-    return NextResponse.json(user)
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = user
+
+    return NextResponse.json(userWithoutPassword)
   } catch (error) {
-    console.error('Failed to update user:', error)
+    console.error('Error updating user:', error)
     return NextResponse.json(
-      { error: 'Failed to update user' },
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -96,19 +85,36 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const params = await context.params
-    await db.user.delete({
-      where: { id: params.id }
+    const userId = params.id
+
+    // Check if user exists
+    const user = await db.user.findUnique({
+      where: { id: userId }
     })
 
-    return NextResponse.json({ message: 'User deleted successfully' })
-  } catch (error) {
-    console.error('Failed to delete user:', error)
+    if (!user) {
+      return NextResponse.json(
+        { message: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Delete the user (cascade will handle related records)
+    await db.user.delete({
+      where: { id: userId }
+    })
+
     return NextResponse.json(
-      { error: 'Failed to delete user' },
+      { message: 'User deleted successfully' },
+      { status: 200 }
+    )
+  } catch (error) {
+    console.error('Error deleting user:', error)
+    return NextResponse.json(
+      { message: 'Internal server error' },
       { status: 500 }
     )
   }

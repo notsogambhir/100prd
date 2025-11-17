@@ -1,216 +1,255 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, UserRole, CourseStatus, StudentStatus, AssessmentType } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
 async function main() {
   console.log('Seeding database...')
 
-  // First create the admin user
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@obe.com' },
-    update: {},
-    create: {
-      email: 'admin@obe.com',
-      password: 'password', // Plain text for demo purposes
-      name: 'System Administrator',
-      role: 'Admin',
-      status: 'Active'
-    }
-  })
-
-  // Create colleges
-  const engineeringCollege = await prisma.college.upsert({
-    where: { name: 'Engineering College' },
-    update: {},
-    create: {
+  // Create Colleges
+  const engineeringCollege = await prisma.college.create({
+    data: {
       name: 'Engineering College',
-      description: 'College of Engineering and Technology',
-      createdBy: admin.id
+      code: 'ENG'
     }
   })
 
-  const managementCollege = await prisma.college.upsert({
-    where: { name: 'Management College' },
-    update: {},
-    create: {
-      name: 'Management College',
-      description: 'College of Business Administration',
-      createdBy: admin.id
+  const managementCollege = await prisma.college.create({
+    data: {
+      name: 'Management College', 
+      code: 'MGT'
     }
   })
 
-  // Create other users
-  const dean = await prisma.user.upsert({
-    where: { email: 'dean@obe.com' },
-    update: {},
-    create: {
-      email: 'dean@obe.com',
-      password: 'password',
-      name: 'University Dean',
-      role: 'University',
-      status: 'Active'
+  // Create Users
+  const admin = await prisma.user.create({
+    data: {
+      username: 'admin',
+      email: 'admin@obe.edu',
+      password: await bcrypt.hash('password', 10),
+      name: 'System Administrator',
+      role: UserRole.ADMIN
     }
   })
 
-  const hod = await prisma.user.upsert({
-    where: { email: 'hod@obe.com' },
-    update: {},
-    create: {
-      email: 'hod@obe.com',
-      password: 'password',
+  const dean = await prisma.user.create({
+    data: {
+      username: 'dean',
+      email: 'dean@obe.edu',
+      password: await bcrypt.hash('password', 10),
+      name: 'Dean of Academics',
+      role: UserRole.UNIVERSITY
+    }
+  })
+
+  const hod = await prisma.user.create({
+    data: {
+      username: 'hod',
+      email: 'hod@obe.edu',
+      password: await bcrypt.hash('password', 10),
       name: 'Department Head',
-      role: 'Department',
-      status: 'Active',
+      role: UserRole.DEPARTMENT,
       collegeId: engineeringCollege.id
     }
   })
 
-  const pc = await prisma.user.upsert({
-    where: { email: 'pc@obe.com' },
-    update: {},
-    create: {
-      email: 'pc@obe.com',
-      password: 'password',
-      name: 'Program Coordinator',
-      role: 'PC',
-      status: 'Active',
+  const pc = await prisma.user.create({
+    data: {
+      username: 'pc',
+      email: 'pc@obe.edu',
+      password: await bcrypt.hash('password', 10),
+      name: 'Program Co-ordinator',
+      role: UserRole.PC,
       collegeId: engineeringCollege.id
     }
   })
 
-  const teacher = await prisma.user.upsert({
-    where: { email: 'teacher@obe.com' },
-    update: {},
-    create: {
-      email: 'teacher@obe.com',
-      password: 'password',
-      name: 'Teacher',
-      role: 'Teacher',
-      status: 'Active',
+  const teacher = await prisma.user.create({
+    data: {
+      username: 'teacher',
+      email: 'teacher@obe.edu',
+      password: await bcrypt.hash('password', 10),
+      name: 'Faculty Member',
+      role: UserRole.TEACHER,
       collegeId: engineeringCollege.id
     }
   })
 
-  // Create programs
-  const beProgram = await prisma.program.upsert({
-    where: { code: 'BE-CSE' },
-    update: {},
-    create: {
-      name: 'Bachelor of Engineering - Computer Science',
-      code: 'BE-CSE',
-      description: 'Computer Science and Engineering Program',
+  // Create Programs
+  const beProgram = await prisma.program.create({
+    data: {
+      name: 'Bachelor of Engineering',
+      code: 'BE',
       duration: 4,
       collegeId: engineeringCollege.id,
-      pcId: pc.id,
-      createdBy: admin.id
+      coordinatorId: pc.id
     }
   })
 
-  const mbaProgram = await prisma.program.upsert({
-    where: { code: 'MBA' },
-    update: {},
-    create: {
-      name: 'Master of Business Administration',
-      code: 'MBA',
-      description: 'Business Administration Program',
-      duration: 2,
-      collegeId: managementCollege.id,
-      createdBy: admin.id
-    }
-  })
-
-  // Create batches
-  const currentBatch = await prisma.batch.create({
+  // Create Batches
+  const batch2025 = await prisma.batch.create({
     data: {
       name: '2025-2029',
       startYear: 2025,
       endYear: 2029,
-      programId: beProgram.id,
-      createdBy: admin.id
+      programId: beProgram.id
     }
   })
 
-  const previousBatch = await prisma.batch.create({
-    data: {
-      name: '2024-2028',
-      startYear: 2024,
-      endYear: 2028,
-      programId: beProgram.id,
-      createdBy: admin.id
-    }
-  })
-
-  // Create sections
+  // Create Sections
   const sectionA = await prisma.section.create({
     data: {
       name: 'A',
-      batchId: currentBatch.id
+      batchId: batch2025.id
     }
   })
 
   const sectionB = await prisma.section.create({
     data: {
       name: 'B',
-      batchId: currentBatch.id
+      batchId: batch2025.id
     }
   })
 
-  // Create some sample courses
-  const course1 = await prisma.course.create({
-    data: {
-      code: 'CS101',
-      name: 'Introduction to Programming',
-      description: 'Basic programming concepts',
-      credits: 4,
-      status: 'Active',
-      programId: beProgram.id,
-      batchId: currentBatch.id,
-      sectionId: sectionA.id,
-      teacherId: teacher.id,
-      createdBy: pc.id
-    }
-  })
-
-  const course2 = await prisma.course.create({
-    data: {
-      code: 'CS201',
-      name: 'Data Structures',
-      description: 'Advanced data structures and algorithms',
-      credits: 4,
-      status: 'Active',
-      programId: beProgram.id,
-      batchId: currentBatch.id,
-      sectionId: sectionA.id,
-      teacherId: teacher.id,
-      createdBy: pc.id
-    }
-  })
-
-  // Create some sample students
-  for (let i = 1; i <= 10; i++) {
-    await prisma.student.upsert({
-      where: { rollNumber: `BE25CS${i.toString().padStart(3, '0')}` },
-      update: {},
-      create: {
-        name: `Student ${i}`,
-        email: `student${i}@obe.com`,
-        rollNumber: `BE25CS${i.toString().padStart(3, '0')}`,
-        status: 'Active',
-        sectionId: sectionA.id
-      }
-    })
-  }
-
-  // Create program outcomes
+  // Create Program Outcomes
+  const pos = []
   for (let i = 1; i <= 12; i++) {
-    await prisma.programOutcome.create({
+    const po = await prisma.programOutcome.create({
       data: {
         code: `PO${i}`,
         description: `Program Outcome ${i}: Engineering knowledge and problem solving`,
         programId: beProgram.id
       }
     })
+    pos.push(po)
   }
+
+  // Create Courses
+  const mathCourse = await prisma.course.create({
+    data: {
+      code: 'MA101',
+      name: 'Mathematics I',
+      credits: 4,
+      programId: beProgram.id,
+      batchId: batch2025.id,
+      status: CourseStatus.ACTIVE
+    }
+  })
+
+  const physicsCourse = await prisma.course.create({
+    data: {
+      code: 'PH101',
+      name: 'Physics I',
+      credits: 3,
+      programId: beProgram.id,
+      batchId: batch2025.id,
+      status: CourseStatus.ACTIVE
+    }
+  })
+
+  // Create Course Outcomes for Mathematics
+  const mathCOs = []
+  for (let i = 1; i <= 5; i++) {
+    const co = await prisma.courseOutcome.create({
+      data: {
+        code: `CO${i}`,
+        description: `Course Outcome ${i}: Apply mathematical concepts`,
+        courseId: mathCourse.id
+      }
+    })
+    mathCOs.push(co)
+  }
+
+  // Create CO-PO Mappings for Mathematics
+  for (const co of mathCOs) {
+    for (let i = 0; i < 3; i++) {
+      await prisma.coPoMapping.create({
+        data: {
+          courseId: mathCourse.id,
+          coId: co.id,
+          poId: pos[i].id,
+          level: Math.floor(Math.random() * 3) + 1
+        }
+      })
+    }
+  }
+
+  // Create Sample Students
+  const students = []
+  for (let i = 1; i <= 20; i++) {
+    const student = await prisma.student.create({
+      data: {
+        registerNo: `BE2025${String(i).padStart(3, '0')}`,
+        name: `Student ${i}`,
+        email: `student${i}@obe.edu`,
+        status: StudentStatus.ACTIVE,
+        sectionId: i <= 10 ? sectionA.id : sectionB.id
+      }
+    })
+    students.push(student)
+
+    // Enroll students in courses
+    await prisma.enrollment.create({
+      data: {
+        studentId: student.id,
+        courseId: mathCourse.id
+      }
+    })
+  }
+
+  // Create Assessments
+  const midtermAssessment = await prisma.assessment.create({
+    data: {
+      name: 'Mid-Term Examination',
+      type: AssessmentType.INTERNAL,
+      courseId: mathCourse.id,
+      sectionId: sectionA.id
+    }
+  })
+
+  // Create Assessment Questions
+  const questions = []
+  for (let i = 1; i <= 5; i++) {
+    const question = await prisma.assessmentQuestion.create({
+      data: {
+        assessmentId: midtermAssessment.id,
+        questionName: `Q${i}`,
+        maxMarks: 20,
+        coId: mathCOs[i - 1].id
+      }
+    })
+    questions.push(question)
+  }
+
+  // Create Sample Marks
+  for (const student of students.slice(0, 10)) {
+    for (const question of questions) {
+      await prisma.mark.create({
+        data: {
+          studentId: student.id,
+          assessmentQuestionId: question.id,
+          marks: Math.floor(Math.random() * 20) + 1
+        }
+      })
+    }
+  }
+
+  // Assign teachers to courses
+  await prisma.courseAssignment.create({
+    data: {
+      courseId: mathCourse.id,
+      teacherId: teacher.id,
+      sectionId: sectionA.id
+    }
+  })
+
+  // Assign teacher to PC
+  await prisma.teacherAssignment.create({
+    data: {
+      teacherId: teacher.id,
+      pcId: pc.id
+    }
+  })
 
   console.log('Database seeded successfully!')
 }

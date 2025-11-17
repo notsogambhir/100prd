@@ -1,422 +1,568 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
-} from '@/components/ui/dialog'
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
-import { 
-  UserCheck, 
-  Users, 
-  Building, 
-  BookOpen,
-  Loader2,
-  Save,
-  Settings
-} from 'lucide-react'
+import { Input } from '@/components/ui/input'
+
+interface User {
+  id: string
+  username: string
+  email: string
+  name: string
+  role: string
+  collegeId?: string
+  college?: {
+    name: string
+  }
+  createdAt: string
+}
 
 interface Program {
   id: string
   name: string
-  code?: string
-  college: {
-    name: string
-  }
-  pc?: {
-    id: string
-    name: string
-    email: string
-  }
-  _count: {
-    courses: number
-    batches: number
-  }
+  code: string
 }
 
-interface Teacher {
+interface TeacherAssignment {
   id: string
-  name: string
-  email: string
-  college?: {
+  teacherId: string
+  pcId: string
+  createdAt: string
+  teacher: {
     name: string
+    username: string
+    role: string
   }
-  teacherToPcs: Array<{
-    pc: {
-      id: string
-      name: string
-    }
-  }>
+  pc: {
+    name: string
+    username: string
+    role: string
+  }
 }
 
-interface College {
-  id: string
-  name: string
-}
-
-export default function FacultyManagement() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
+export default function FacultyManagementPage() {
+  const [users, setUsers] = useState<User[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
-  const [teachers, setTeachers] = useState<Teacher[]>([])
-  const [colleges, setColleges] = useState<College[]>([])
-  const [selectedCollege, setSelectedCollege] = useState<string>('')
-  const [isLoading, setIsLoading] = useState(true)
-  const [isTeacherDialogOpen, setIsTeacherDialogOpen] = useState(false)
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null)
-  const [selectedPCs, setSelectedPCs] = useState<string[]>([])
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [pcAssignments, setPcAssignments] = useState<Record<string, string>>({})
+  const [assignments, setAssignments] = useState<TeacherAssignment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+
+  // Form states
+  const [userForm, setUserForm] = useState({
+    username: '',
+    email: '',
+    name: '',
+    role: '',
+    collegeId: ''
+  })
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [assignmentForm, setAssignmentForm] = useState({
+    teacherId: '',
+    pcId: ''
+  })
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false)
+  const [selectedTeacher, setSelectedTeacher] = useState<User | null>(null)
+
+  // Dialog states
+  const [userDialogOpen, setUserDialogOpen] = useState(false)
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin')
-    }
-  }, [status, router])
-
-  useEffect(() => {
-    if (session?.user) {
-      fetchData()
-    }
-  }, [session, selectedCollege])
+    fetchData()
+  }, [])
 
   const fetchData = async () => {
     try {
-      const [programsRes, teachersRes, collegesRes] = await Promise.all([
-        fetch(`/api/programs${selectedCollege ? `?collegeId=${selectedCollege}` : ''}`),
-        fetch(`/api/teachers/assignment${selectedCollege ? `?collegeId=${selectedCollege}` : ''}`),
-        fetch('/api/colleges')
+      const [usersRes, programsRes, assignmentsRes] = await Promise.all([
+        fetch('/api/users'),
+        fetch('/api/programs'),
+        fetch('/api/teacher-assignments')
       ])
 
-      if (programsRes.ok) {
-        const programsData = await programsRes.json()
-        setPrograms(programsData)
-        
-        // Initialize PC assignments
-        const assignments: Record<string, string> = {}
-        programsData.forEach((program: Program) => {
-          if (program.pc) {
-            assignments[program.id] = program.pc.id
-          }
-        })
-        setPcAssignments(assignments)
-      }
-
-      if (teachersRes.ok) {
-        const teachersData = await teachersRes.json()
-        setTeachers(teachersData)
-      }
-
-      if (collegesRes.ok) {
-        const collegesData = await collegesRes.json()
-        setColleges(collegesData)
-        
-        // Auto-select user's college if Department Head
-        if (session?.user?.role === 'Department' && session?.user?.collegeId) {
-          setSelectedCollege(session.user.collegeId)
-        }
-      }
+      if (usersRes.ok) setUsers(await usersRes.json())
+      if (programsRes.ok) setPrograms(await programsRes.json())
+      if (assignmentsRes.ok) setAssignments(await assignmentsRes.json())
     } catch (error) {
-      console.error('Failed to fetch data:', error)
+      console.error('Error fetching data:', error)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const handlePCAssignment = async (programId: string, pcId: string) => {
+  const handleAddUser = async () => {
     try {
-      const response = await fetch('/api/programs/assignment', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ programId, pcId })
-      })
-
-      if (response.ok) {
-        await fetchData()
-        setHasUnsavedChanges(false)
-      }
-    } catch (error) {
-      console.error('Failed to update PC assignment:', error)
-    }
-  }
-
-  const handleTeacherAssignment = async () => {
-    if (!selectedTeacher) return
-
-    try {
-      const response = await fetch('/api/teachers/assignment', {
+      const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          teacherId: selectedTeacher.id,
-          pcIds: selectedPCs
-        })
+        body: JSON.stringify(userForm)
       })
 
       if (response.ok) {
-        await fetchData()
-        setIsTeacherDialogOpen(false)
-        setSelectedTeacher(null)
-        setSelectedPCs([])
+        setUserDialogOpen(false)
+        resetUserForm()
+        fetchData()
       }
     } catch (error) {
-      console.error('Failed to update teacher assignments:', error)
+      console.error('Error adding user:', error)
     }
   }
 
-  const openTeacherDialog = (teacher: Teacher) => {
+  const handleEditUser = (user: User) => {
+    setEditingUser(user)
+    setUserForm({
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      collegeId: user.collegeId || ''
+    })
+    setUserDialogOpen(true)
+  }
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return
+
+    try {
+      const response = await fetch(`/api/users/${editingUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userForm)
+      })
+
+      if (response.ok) {
+        setUserDialogOpen(false)
+        resetUserForm()
+        setEditingUser(null)
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Error updating user:', error)
+    }
+  }
+
+  const handleDeleteUser = async (id: string) => {
+    try {
+      const response = await fetch(`/api/users/${id}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error)
+    }
+  }
+
+  const handleAddAssignment = async () => {
+    try {
+      const response = await fetch('/api/teacher-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(assignmentForm)
+      })
+
+      if (response.ok) {
+        setAssignmentDialogOpen(false)
+        setAssignmentForm({ teacherId: '', pcId: '' })
+        setSelectedTeacher(null)
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Error adding assignment:', error)
+    }
+  }
+
+  const handleManageAssignment = (teacher: User) => {
     setSelectedTeacher(teacher)
-    setSelectedPCs(teacher.teacherToPcs.map(tp => tp.pc.id))
-    setIsTeacherDialogOpen(true)
+    setAssignmentForm({
+      teacherId: teacher.id,
+      pcId: ''
+    })
+    setAssignmentDialogOpen(true)
   }
 
-  const saveAllChanges = async () => {
-    for (const [programId, pcId] of Object.entries(pcAssignments)) {
-      await handlePCAssignment(programId, pcId)
+  const resetUserForm = () => {
+    setUserForm({
+      username: '',
+      email: '',
+      name: '',
+      role: '',
+      collegeId: ''
+    })
+  }
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'ADMIN': return 'bg-red-100 text-red-800'
+      case 'UNIVERSITY': return 'bg-purple-100 text-purple-800'
+      case 'DEPARTMENT': return 'bg-blue-100 text-blue-800'
+      case 'PC': return 'bg-green-100 text-green-800'
+      case 'TEACHER': return 'bg-yellow-100 text-yellow-800'
+      default: return 'bg-gray-100 text-gray-800'
     }
   }
 
-  if (status === 'loading' || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'ADMIN': return 'Administrator'
+      case 'UNIVERSITY': return 'University'
+      case 'DEPARTMENT': return 'Department Head'
+      case 'PC': return 'Program Co-ordinator'
+      case 'TEACHER': return 'Teacher'
+      default: return role
+    }
   }
 
-  if (!session || (session.user.role !== 'Department' && session.user.role !== 'Admin')) {
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.username.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesRole = roleFilter === 'all' || user.role === roleFilter
+    return matchesSearch && matchesRole
+  })
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
-          <p className="text-gray-600 mt-2">You don't have permission to access this page.</p>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
         </div>
-      </div>
+      </DashboardLayout>
     )
   }
-
-  const availablePCs = teachers.filter(t => 
-    t.teacherToPcs.some(tp => tp.pc.college.name === programs.find(p => p.id === Object.keys(pcAssignments)[0])?.college?.name)
-  ).map(t => t.teacherToPcs.map(tp => tp.pc)).flat()
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Faculty Management</h1>
-          <p className="mt-2 text-gray-600">
-            Manage program coordinators and teacher assignments
-          </p>
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Faculty Management</h1>
+            <p className="text-gray-600 mt-2">Assign Program Co-ordinators and Teachers</p>
+          </div>
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Add User
+          </Button>
         </div>
 
-        {/* College Filter */}
-        {(session.user.role === 'Admin' || session.user.role === 'University') && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Building className="h-5 w-5 mr-2" />
-                College Selection
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select value={selectedCollege} onValueChange={setSelectedCollege}>
-                <SelectTrigger className="w-full md:w-64">
-                  <SelectValue placeholder="Select a college" />
+        {/* User Management Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              User Management
+            </CardTitle>
+            <CardDescription>Manage system users and their roles</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Filters */}
+            <div className="flex gap-4 mb-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search users..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              </div>
+              </div>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Filter by role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Colleges</SelectItem>
-                  {colleges.map((college) => (
-                    <SelectItem key={college.id} value={college.id}>
-                      {college.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="ADMIN">Administrator</SelectItem>
+                  <SelectItem value="UNIVERSITY">University</SelectItem>
+                  <SelectItem value="DEPARTMENT">Department Head</SelectItem>
+                  <SelectItem value="PC">Program Co-ordinator</SelectItem>
+                  <SelectItem value="TEACHER">Teacher</SelectItem>
                 </SelectContent>
               </Select>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* PC Assignments */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center">
-                  <UserCheck className="h-5 w-5 mr-2" />
-                  Program Coordinator Assignments
-                </CardTitle>
-                {hasUnsavedChanges && (
-                  <Button onClick={saveAllChanges} size="sm">
-                    <Save className="h-4 w-4 mr-1" />
-                    Save All
-                  </Button>
-                )}
-              </div>
-              <CardDescription>
-                Assign Program Coordinators to each program
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {programs.map((program) => (
-                  <div key={program.id} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-medium">{program.name}</h3>
-                        {program.code && (
-                          <Badge variant="secondary" className="text-xs mt-1">
-                            {program.code}
-                          </Badge>
-                        )}
-                        <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                          <div className="flex items-center">
-                            <BookOpen className="h-3 w-3 mr-1" />
-                            {program._count.courses} courses
-                          </div>
-                          <div className="flex items-center">
-                            <Users className="h-3 w-3 mr-1" />
-                            {program._count.batches} batches
-                          </div>
-                        </div>
-                      </div>
-                      <Select
-                        value={pcAssignments[program.id] || ''}
-                        onValueChange={(value) => {
-                          setPcAssignments(prev => ({
-                            ...prev,
-                            [program.id]: value
-                          }))
-                          setHasUnsavedChanges(true)
-                        }}
-                      >
-                        <SelectTrigger className="w-48">
-                          <SelectValue placeholder="Assign PC" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">No PC Assigned</SelectItem>
-                          {teachers
-                            .filter(t => t.role === 'Teacher' || t.role === 'PC')
-                            .map((teacher) => (
-                              <SelectItem key={teacher.id} value={teacher.id}>
-                                {teacher.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {program.pc && (
-                      <div className="mt-2 text-sm text-green-600">
-                        Currently assigned: {program.pc.name} ({program.pc.email})
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Teacher Assignments */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Users className="h-5 w-5 mr-2" />
-                Teacher Assignments
-              </CardTitle>
-              <CardDescription>
-                Assign teachers to Program Coordinators
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {teachers
-                  .filter(t => t.role === 'Teacher')
-                  .map((teacher) => (
-                  <div
-                    key={teacher.id}
-                    className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
-                    onClick={() => openTeacherDialog(teacher)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">{teacher.name}</h4>
-                        <p className="text-sm text-gray-500">{teacher.email}</p>
-                        {teacher.teacherToPcs.length > 0 && (
-                          <div className="mt-1">
-                            <Badge variant="outline" className="text-xs">
-                              Assigned to {teacher.teacherToPcs.length} PC(s)
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                      <Button variant="ghost" size="sm">
-                        <Settings className="h-4 w-4" />
-                      </Button>
+        {/* Faculty Assignment Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5" />
+              Faculty Assignment
+            </CardTitle>
+            <CardDescription>Assign teachers to Program Co-ordinators</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {assignments.map((assignment) => (
+                <div key={assignment.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <div className="font-medium">{assignment.teacher.name}</div>
+                    <div className="text-sm text-gray-600">
+                      <div>Username: {assignment.teacher.username}</div>
+                      <div>Role: {getRoleLabel(assignment.teacher.role)}</div>
+                      <div>Assigned to: {assignment.pc.name} ({assignment.pc.username})</div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleManageAssignment(assignment.teacher)}
+                    >
+                      Manage
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remove Assignment</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to remove {assignment.teacher.name} from {assignment.pc.name}?
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => {
+                            // TODO: Implement delete assignment
+                            console.log('Delete assignment:', assignment.id)
+                          }}>
+                            Remove
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button
+              onClick={() => setAssignmentDialogOpen(true)}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Assignment
+            </Button>
+          </CardContent>
+        </Card>
 
-        {/* Teacher Assignment Dialog */}
-        <Dialog open={isTeacherDialogOpen} onOpenChange={setIsTeacherDialogOpen}>
-          <DialogContent>
+        {/* Users Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              All Users ({filteredUsers.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Username</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>College</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.username}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <Badge className={getRoleColor(user.role)}>
+                        {getRoleLabel(user.role)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{user.college?.name || 'N/A'}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditUser(user)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete User</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete {user.name}? This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteUser(user.id)}>
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* User Dialog */}
+        <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Manage Teacher Assignments</DialogTitle>
+              <DialogTitle>
+                {editingUser ? 'Edit User' : 'Add New User'}
+              </DialogTitle>
               <DialogDescription>
-                Assign {selectedTeacher?.name} to Program Coordinators
+                {editingUser ? 'Update user information' : 'Create a new user account'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="space-y-3">
-                {programs.map((program) => (
-                  <div key={program.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={program.id}
-                      checked={selectedPCs.includes(program.id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedPCs(prev => [...prev, program.id])
-                        } else {
-                          setSelectedPCs(prev => prev.filter(id => id !== program.id))
-                        }
-                      }}
-                    />
-                    <label htmlFor={program.id} className="text-sm font-medium">
-                      {program.name}
-                    </label>
-                  </div>
-                ))}
+              <div>
+                <label className="text-sm font-medium">Username</label>
+                <Input
+                  value={userForm.username}
+                  onChange={(e) => setUserForm(prev => ({ ...prev, username: e.target.value }))}
+                  disabled={!!editingUser}
+                />
               </div>
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setIsTeacherDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleTeacherAssignment}>
-                  Save Assignments
-                </Button>
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  type="email"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Full Name</label>
+                <Input
+                  value={userForm.name}
+                  onChange={(e) => setUserForm(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Role</label>
+                <Select value={userForm.role} onValueChange={(value) => setUserForm(prev => ({ ...prev, role: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADMIN">Administrator</SelectItem>
+                    <SelectItem value="UNIVERSITY">University</SelectItem>
+                    <SelectItem value="DEPARTMENT">Department Head</SelectItem>
+                    <SelectItem value="PC">Program Co-ordinator</SelectItem>
+                    <SelectItem value="TEACHER">Teacher</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">College</label>
+                <Select value={userForm.collegeId} onValueChange={(value) => setUserForm(prev => ({ ...prev, collegeId: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select college" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Select a college</SelectItem>
+                    {programs.map((program) => (
+                      <SelectItem key={program.id} value={program.id}>
+                        {program.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+            <DialogFooter>
+              <Button onClick={editingUser ? handleUpdateUser : handleAddUser}>
+                {editingUser ? 'Update User' : 'Add User'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Assignment Dialog */}
+        <Dialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Assign Teacher to Program Co-ordinator</DialogTitle>
+              <DialogDescription>
+                Select a teacher and program co-ordinator to create assignment
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Teacher</label>
+                <Select 
+                  value={assignmentForm.teacherId} 
+                  onValueChange={(value) => setAssignmentForm(prev => ({ ...prev, teacherId: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select teacher" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users
+                      .filter(user => user.role === 'TEACHER')
+                      .map((teacher) => (
+                        <SelectItem key={teacher.id} value={teacher.id}>
+                          {teacher.name} ({teacher.username})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Program Co-ordinator</label>
+                <Select 
+                  value={assignmentForm.pcId} 
+                  onValueChange={(value) => setAssignmentForm(prev => ({ ...prev, pcId: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select PC" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users
+                      .filter(user => user.role === 'PC')
+                      .map((pc) => (
+                        <SelectItem key={pc.id} value={pc.id}>
+                          {pc.name} ({pc.username})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleAddAssignment}>
+                Create Assignment
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }
