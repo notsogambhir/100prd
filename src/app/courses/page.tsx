@@ -5,6 +5,8 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { 
   Dialog,
   DialogContent,
@@ -15,6 +17,24 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { 
   Plus, 
   BookOpen, 
   Users, 
@@ -23,7 +43,8 @@ import {
   Trash2,
   Play,
   Pause,
-  Check
+  Check,
+  Upload
 } from 'lucide-react'
 
 interface Course {
@@ -44,12 +65,43 @@ interface Course {
   }
 }
 
+interface Program {
+  id: string
+  name: string
+  code: string
+  college: {
+    name: string
+  }
+}
+
+interface Batch {
+  id: string
+  name: string
+  programId: string
+}
+
 export default function CoursesPage() {
   const [courses, setCourses] = useState<Course[]>([])
+  const [programs, setPrograms] = useState<Program[]>([])
+  const [batches, setBatches] = useState<Batch[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Form states
+  const [courseForm, setCourseForm] = useState({
+    name: '',
+    code: '',
+    credits: 3,
+    programId: '',
+    batchId: ''
+  })
+
+  // Dialog states
+  const [courseDialogOpen, setCourseDialogOpen] = useState(false)
 
   useEffect(() => {
     fetchCourses()
+    fetchPrograms()
+    fetchBatches()
   }, [])
 
   const fetchCourses = async () => {
@@ -62,6 +114,76 @@ export default function CoursesPage() {
       console.error('Error fetching courses:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchPrograms = async () => {
+    try {
+      const response = await fetch('/api/programs')
+      if (response.ok) {
+        setPrograms(await response.json())
+      }
+    } catch (error) {
+      console.error('Error fetching programs:', error)
+    }
+  }
+
+  const fetchBatches = async () => {
+    try {
+      const response = await fetch('/api/batches')
+      if (response.ok) {
+        setBatches(await response.json())
+      }
+    } catch (error) {
+      console.error('Error fetching batches:', error)
+    }
+  }
+
+  const handleAddCourse = async () => {
+    try {
+      const response = await fetch('/api/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(courseForm)
+      })
+
+      if (response.ok) {
+        setCourseDialogOpen(false)
+        setCourseForm({ name: '', code: '', credits: 3, programId: '', batchId: '' })
+        fetchCourses()
+      }
+    } catch (error) {
+      console.error('Error adding course:', error)
+    }
+  }
+
+  const handleDeleteCourse = async (id: string) => {
+    try {
+      const response = await fetch(`/api/courses/${id}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        fetchCourses()
+      }
+    } catch (error) {
+      console.error('Error deleting course:', error)
+    }
+  }
+
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/courses/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      })
+
+      if (response.ok) {
+        fetchCourses()
+      }
+    } catch (error) {
+      console.error('Error changing course status:', error)
     }
   }
 
@@ -101,10 +223,90 @@ export default function CoursesPage() {
             <h1 className="text-3xl font-bold text-gray-900">Courses</h1>
             <p className="text-gray-600 mt-2">Manage academic courses and curriculum</p>
           </div>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Course
-          </Button>
+          <Dialog open={courseDialogOpen} onOpenChange={setCourseDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Course
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Course</DialogTitle>
+                <DialogDescription>
+                  Create a new academic course
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="course-name">Course Name</Label>
+                  <Input
+                    id="course-name"
+                    value={courseForm.name}
+                    onChange={(e) => setCourseForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Enter course name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="course-code">Course Code</Label>
+                  <Input
+                    id="course-code"
+                    value={courseForm.code}
+                    onChange={(e) => setCourseForm(prev => ({ ...prev, code: e.target.value }))}
+                    placeholder="Enter course code"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="course-credits">Credits</Label>
+                  <Input
+                    id="course-credits"
+                    type="number"
+                    value={courseForm.credits}
+                    onChange={(e) => setCourseForm(prev => ({ ...prev, credits: parseInt(e.target.value) }))}
+                    min="1"
+                    max="10"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="course-program">Program</Label>
+                  <Select value={courseForm.programId} onValueChange={(value) => setCourseForm(prev => ({ ...prev, programId: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select program" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programs.map((program) => (
+                        <SelectItem key={program.id} value={program.id}>
+                          {program.name} ({program.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="course-batch">Batch</Label>
+                  <Select value={courseForm.batchId} onValueChange={(value) => setCourseForm(prev => ({ ...prev, batchId: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select batch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {batches
+                        .filter(batch => !courseForm.programId || batch.programId === courseForm.programId)
+                        .map((batch) => (
+                          <SelectItem key={batch.id} value={batch.id}>
+                            {batch.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleAddCourse} disabled={!courseForm.name || !courseForm.code || !courseForm.programId || !courseForm.batchId}>
+                  Add Course
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Course Statistics */}
@@ -206,12 +408,40 @@ export default function CoursesPage() {
                     </div>
 
                     <div className="flex space-x-2 ml-4">
+                      <Select value={course.status} onValueChange={(value) => handleStatusChange(course.id, value)}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="FUTURE">Future</SelectItem>
+                          <SelectItem value="ACTIVE">Active</SelectItem>
+                          <SelectItem value="COMPLETED">Completed</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button variant="outline" size="sm">
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="sm">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Course</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete {course.name}? This will also delete all associated assessments, outcomes, and marks. This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteCourse(course.id)}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 </div>

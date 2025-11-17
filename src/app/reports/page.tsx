@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,15 +12,118 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { 
   FileText, 
   Download, 
   BarChart3,
   TrendingUp,
   Users,
-  BookOpen
+  BookOpen,
+  Loader2,
+  Eye
 } from 'lucide-react'
+import { PDFGenerator } from '@/lib/pdf-generator'
+import { AttainmentCalculator } from '@/lib/attainment/calculator'
 
 export default function ReportsPage() {
+  const [selectedReport, setSelectedReport] = useState('')
+  const [selectedCourse, setSelectedCourse] = useState('')
+  const [selectedScope, setSelectedScope] = useState('overall')
+  const [selectedBatch, setSelectedBatch] = useState('')
+  const [selectedProgram, setSelectedProgram] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [reportData, setReportData] = useState<any>(null)
+  const [courses, setCourses] = useState<any[]>([])
+  const [programs, setPrograms] = useState<any[]>([])
+  const [batches, setBatches] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchDropdownData()
+  }, [])
+
+  const fetchDropdownData = async () => {
+    try {
+      const [coursesRes, programsRes, batchesRes] = await Promise.all([
+        fetch('/api/courses'),
+        fetch('/api/programs'),
+        fetch('/api/batches')
+      ])
+
+      if (coursesRes.ok) setCourses(await coursesRes.json())
+      if (programsRes.ok) setPrograms(await programsRes.json())
+      if (batchesRes.ok) setBatches(await batchesRes.json())
+    } catch (error) {
+      console.error('Error fetching dropdown data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGenerateReport = async () => {
+    if (!selectedReport || (!selectedCourse && selectedReport !== 'po-attainment')) {
+      alert('Please select required fields')
+      return
+    }
+
+    setIsGenerating(true)
+    try {
+      let data = null
+
+      switch (selectedReport) {
+        case 'course-attainment':
+          data = await AttainmentCalculator.generateCourseAttainmentReport(
+            selectedCourse,
+            selectedScope === 'overall' ? undefined : selectedScope
+          )
+          break
+        case 'po-attainment':
+          data = await AttainmentCalculator.generateAllPOAttainments(selectedProgram)
+          break
+        case 'assessment-comparison':
+          // Implementation for assessment comparison
+          break
+        case 'student-performance':
+          // Implementation for student performance
+          break
+      }
+
+      setReportData(data)
+      setShowPreview(true)
+    } catch (error) {
+      console.error('Error generating report:', error)
+      alert('Failed to generate report. Please try again.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleDownloadPDF = async () => {
+    if (!reportData) return
+
+    try {
+      switch (selectedReport) {
+        case 'course-attainment':
+          await PDFGenerator.generateCourseAttainmentReport(reportData)
+          break
+        case 'po-attainment':
+          await PDFGenerator.generatePOAttainmentReport(reportData)
+          break
+        default:
+          alert('PDF generation not available for this report type')
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      alert('Failed to generate PDF. Please try again.')
+    }
+  }
   const reportTypes = [
     {
       id: 'course-attainment',
@@ -107,51 +211,77 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">Course</label>
-                <Select>
+                <Select value={selectedCourse} onValueChange={setSelectedCourse}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select course" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="math101">Mathematics I</SelectItem>
-                    <SelectItem value="phy101">Physics I</SelectItem>
-                    <SelectItem value="cs101">Computer Science</SelectItem>
+                    {courses.map((course) => (
+                      <SelectItem key={course.id} value={course.id}>
+                        {course.name} ({course.code})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
                 <label className="text-sm font-medium mb-2 block">Scope</label>
-                <Select>
+                <Select value={selectedScope} onValueChange={setSelectedScope}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select scope" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="overall">Overall Course</SelectItem>
-                    <SelectItem value="section-a">Section A</SelectItem>
-                    <SelectItem value="section-b">Section B</SelectItem>
+                    {batches
+                      .filter(batch => {
+                        const course = courses.find(c => c.id === selectedCourse)
+                        return course && course.batchId === batch.id
+                      })
+                      .map((batch) => (
+                        <SelectItem key={batch.id} value={batch.id}>
+                          {batch.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
                 <label className="text-sm font-medium mb-2 block">Batch</label>
-                <Select>
+                <Select value={selectedBatch} onValueChange={setSelectedBatch}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select batch" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="2025-2029">2025-2029</SelectItem>
-                    <SelectItem value="2024-2028">2024-2028</SelectItem>
-                    <SelectItem value="2023-2027">2023-2027</SelectItem>
+                    {batches.map((batch) => (
+                      <SelectItem key={batch.id} value={batch.id}>
+                        {batch.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className="flex justify-center">
-              <Button size="lg" className="min-w-48">
-                <FileText className="h-4 w-4 mr-2" />
-                Generate Report
+              <Button 
+                size="lg" 
+                className="min-w-48"
+                onClick={handleGenerateReport}
+                disabled={isGenerating || !selectedReport || (!selectedCourse && selectedReport !== 'po-attainment')}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Generate Report
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>
@@ -200,6 +330,73 @@ export default function ReportsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Report Preview Dialog */}
+        <Dialog open={showPreview} onOpenChange={setShowPreview}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <DialogTitle>Report Preview</DialogTitle>
+                  <DialogDescription>
+                    Review your generated report before downloading
+                  </DialogDescription>
+                </div>
+                <Button onClick={handleDownloadPDF}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </div>
+            </DialogHeader>
+            <div className="mt-4">
+              {reportData && (
+                <div className="space-y-6">
+                  {selectedReport === 'course-attainment' && (
+                    <>
+                      <div>
+                        <h3 className="text-lg font-semibold mb-4">CO Attainment Summary</h3>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-gray-300">
+                            <thead>
+                              <tr className="bg-gray-50">
+                                <th className="border border-gray-300 p-2 text-left">CO Code</th>
+                                <th className="border border-gray-300 p-2 text-left">CO Description</th>
+                                <th className="border border-gray-300 p-2 text-center">Target %</th>
+                                <th className="border border-gray-300 p-2 text-center">Students Meeting Target</th>
+                                <th className="border border-gray-300 p-2 text-center">Attainment %</th>
+                                <th className="border border-gray-300 p-2 text-center">Attainment Level</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {reportData.coAttainments?.map((co: any) => (
+                                <tr key={co.id}>
+                                  <td className="border border-gray-300 p-2 font-medium">{co.code}</td>
+                                  <td className="border border-gray-300 p-2">{co.description}</td>
+                                  <td className="border border-gray-300 p-2 text-center">{co.target}%</td>
+                                  <td className="border border-gray-300 p-2 text-center">{co.studentsMeetingTarget}</td>
+                                  <td className="border border-gray-300 p-2 text-center font-bold">{co.percentageMeetingTarget.toFixed(1)}%</td>
+                                  <td className="border border-gray-300 p-2 text-center font-bold">
+                                    <span className={`px-2 py-1 rounded text-white text-sm ${
+                                      co.attainmentLevel === 3 ? 'bg-red-600' :
+                                      co.attainmentLevel === 2 ? 'bg-orange-600' :
+                                      co.attainmentLevel === 1 ? 'bg-yellow-600' : 'bg-gray-600'
+                                    }`}>
+                                      Level {co.attainmentLevel}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   )

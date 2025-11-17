@@ -131,6 +131,16 @@ export default function CourseDetailPage() {
   const [assessmentDialogOpen, setAssessmentDialogOpen] = useState(false)
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false)
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null)
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+
+  // Faculty Assignment states
+  const [assignmentMode, setAssignmentMode] = useState<'single' | 'section'>('single')
+  const [singleTeacherId, setSingleTeacherId] = useState('')
+  const [sectionAssignments, setSectionAssignments] = useState<Record<string, string>>({})
+  const [currentAssignments, setCurrentAssignments] = useState<any[]>([])
+  const [availableTeachers, setAvailableTeachers] = useState<any[]>([])
+  const [sectionStudents, setSectionStudents] = useState<Record<string, number>>({})
 
   useEffect(() => {
     if (courseId) {
@@ -249,6 +259,103 @@ export default function CourseDetailPage() {
       }
     } catch (error) {
       console.error('Error downloading template:', error)
+    }
+  }
+
+  const handleUploadMarks = async () => {
+    if (!uploadFile || !selectedAssessment) return
+
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('assessmentId', selectedAssessment.id)
+
+      const response = await fetch(`/api/assessments/${selectedAssessment.id}/upload-marks`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (response.ok) {
+        setUploadDialogOpen(false)
+        setUploadFile(null)
+        fetchCourseData()
+      } else {
+        alert('Error uploading marks. Please check the file format.')
+      }
+    } catch (error) {
+      console.error('Error uploading marks:', error)
+      alert('Error uploading marks. Please try again.')
+    }
+  }
+
+  // Faculty Assignment Functions
+  const handleSingleTeacherAssignment = async () => {
+    if (!singleTeacherId) return
+
+    try {
+      const response = await fetch('/api/course-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId,
+          teacherId: singleTeacherId
+        })
+      })
+
+      if (response.ok) {
+        alert('Teacher assigned to course successfully!')
+        fetchCourseData()
+      }
+    } catch (error) {
+      console.error('Error assigning teacher:', error)
+      alert('Failed to assign teacher. Please try again.')
+    }
+  }
+
+  const handleSectionAssignment = (sectionId: string, teacherId: string) => {
+    setSectionAssignments(prev => ({
+      ...prev,
+      [sectionId]: teacherId
+    }))
+  }
+
+  const handleSectionAssignments = async () => {
+    try {
+      const assignments = Object.entries(sectionAssignments).map(([sectionId, teacherId]) => ({
+        courseId,
+        sectionId,
+        teacherId
+      }))
+
+      const response = await fetch('/api/course-assignments/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments })
+      })
+
+      if (response.ok) {
+        alert('Faculty assignments saved successfully!')
+        fetchCourseData()
+        setSectionAssignments({})
+      }
+    } catch (error) {
+      console.error('Error saving assignments:', error)
+      alert('Failed to save assignments. Please try again.')
+    }
+  }
+
+  const handleRemoveAssignment = async (assignmentId: string) => {
+    try {
+      const response = await fetch(`/api/course-assignments/${assignmentId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        fetchCourseData()
+      }
+    } catch (error) {
+      console.error('Error removing assignment:', error)
+      alert('Failed to remove assignment. Please try again.')
     }
   }
 
@@ -419,6 +526,17 @@ export default function CourseDetailPage() {
                             size="sm"
                             onClick={() => {
                               setSelectedAssessment(assessment)
+                              setUploadDialogOpen(true)
+                            }}
+                          >
+                            <Upload className="h-4 w-4 mr-1" />
+                            Upload Marks
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedAssessment(assessment)
                               setQuestionDialogOpen(true)
                             }}
                           >
@@ -562,8 +680,116 @@ export default function CourseDetailPage() {
                 <CardDescription>Assign teachers to course sections</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8 text-gray-500">
-                  Faculty assignment interface will be implemented here
+                <div className="space-y-6">
+                  {/* Assignment Mode Toggle */}
+                  <div className="flex items-center gap-4 mb-6">
+                    <span className="font-medium">Assignment Mode:</span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={assignmentMode === 'single' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAssignmentMode('single')}
+                      >
+                        Single Teacher
+                      </Button>
+                      <Button
+                        variant={assignmentMode === 'section' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAssignmentMode('section')}
+                      >
+                        Assign by Section
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Single Teacher Assignment */}
+                  {assignmentMode === 'single' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Select Teacher</label>
+                        <Select value={singleTeacherId} onValueChange={setSingleTeacherId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a teacher" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTeachers.map((teacher) => (
+                              <SelectItem key={teacher.id} value={teacher.id}>
+                                {teacher.name} ({teacher.username})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button onClick={handleSingleTeacherAssignment} disabled={!singleTeacherId}>
+                        Assign Teacher to Course
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Section-based Assignment */}
+                  {assignmentMode === 'section' && (
+                    <div className="space-y-4">
+                      {sections.map((section) => (
+                        <div key={section.id} className="flex items-center gap-4 p-4 border rounded-lg">
+                          <div className="flex-1">
+                            <span className="font-medium">{section.name}</span>
+                            <span className="text-sm text-gray-600 ml-2">
+                              {sectionStudents[section.id] || 0} students
+                            </span>
+                          </div>
+                          <Select 
+                            value={sectionAssignments[section.id] || ''} 
+                            onValueChange={(value) => handleSectionAssignment(section.id, value)}
+                          >
+                            <SelectTrigger className="w-48">
+                              <SelectValue placeholder="Select teacher" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableTeachers.map((teacher) => (
+                                <SelectItem key={teacher.id} value={teacher.id}>
+                                  {teacher.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      ))}
+                      <div className="flex justify-end mt-4">
+                        <Button onClick={handleSectionAssignments} disabled={Object.keys(sectionAssignments).length === 0}>
+                          Save Assignments
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Current Assignments Display */}
+                  {currentAssignments.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Current Assignments:</h4>
+                      <div className="space-y-2">
+                        {currentAssignments.map((assignment: any) => (
+                          <div key={assignment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div>
+                              <span className="font-medium">{assignment.teacher?.name}</span>
+                              {assignment.section && (
+                                <span className="text-sm text-gray-600 ml-2">
+                                  ({assignment.section.name})
+                                </span>
+                              )}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRemoveAssignment(assignment.id)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -619,6 +845,44 @@ export default function CourseDetailPage() {
           <DialogFooter>
             <Button onClick={handleCreateQuestion} disabled={!questionForm.questionName}>
               Add Question
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Marks Dialog */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Student Marks</DialogTitle>
+            <DialogDescription>
+              Upload the completed Excel file with student marks for {selectedAssessment?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Select Excel File</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                className="w-full p-2 border rounded-md"
+              />
+            </div>
+            {uploadFile && (
+              <div className="text-sm text-gray-600">
+                Selected file: {uploadFile.name}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleUploadMarks}
+              disabled={!uploadFile}
+              className="w-full"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload Marks
             </Button>
           </DialogFooter>
         </DialogContent>

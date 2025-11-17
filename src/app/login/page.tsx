@@ -53,7 +53,13 @@ export default function LoginPage() {
       if (response.ok) {
         localStorage.setItem('token', data.token)
         localStorage.setItem('user', JSON.stringify(data.user))
-        router.push('/')
+        
+        // Redirect based on role
+        if (data.user.role === 'TEACHER' || data.user.role === 'PC') {
+          router.push('/program-selection')
+        } else {
+          router.push('/')
+        }
       } else {
         setError(data.message || 'Login failed')
       }

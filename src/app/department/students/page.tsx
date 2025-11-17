@@ -114,6 +114,8 @@ export default function StudentManagementPage() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
   const [studentDialogOpen, setStudentDialogOpen] = useState(false)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [sectionForm, setSectionForm] = useState({ name: '' })
+  const [sectionDialogOpen, setSectionDialogOpen] = useState(false)
 
   // Dialog states
   const [userDialogOpen, setUserDialogOpen] = useState(false)
@@ -248,6 +250,43 @@ export default function StudentManagementPage() {
     } catch (error) {
       console.error('Error downloading template:', error)
       alert('Failed to download template')
+    }
+  }
+
+  const handleAddSection = async () => {
+    if (!sectionForm.name || !selectedBatch) return
+
+    try {
+      const response = await fetch('/api/sections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: sectionForm.name,
+          batchId: selectedBatch
+        })
+      })
+
+      if (response.ok) {
+        setSectionDialogOpen(false)
+        setSectionForm({ name: '' })
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Error adding section:', error)
+    }
+  }
+
+  const handleDeleteSection = async (sectionId: string) => {
+    try {
+      const response = await fetch(`/api/sections/${sectionId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        fetchData()
+      }
+    } catch (error) {
+      console.error('Error deleting section:', error)
     }
   }
 
@@ -410,6 +449,39 @@ export default function StudentManagementPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Section Management */}
+        {selectedBatch && (
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Manage Sections</CardTitle>
+                <Button onClick={() => setSectionDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Section
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {sections
+                  .filter(section => section.batchId === selectedBatch)
+                  .map((section) => (
+                    <div key={section.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <span className="font-medium">{section.name}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteSection(section.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Students Table */}
         <Card>
@@ -593,6 +665,33 @@ export default function StudentManagementPage() {
               </Button>
               <Button onClick={handleBulkUpload}>
                 Upload
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Section Dialog */}
+        <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Section</DialogTitle>
+              <DialogDescription>
+                Create a new section for the selected batch
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Section Name</label>
+                <Input
+                  value={sectionForm.name}
+                  onChange={(e) => setSectionForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Enter section name (e.g., A, B, C)"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleAddSection} disabled={!sectionForm.name}>
+                Add Section
               </Button>
             </DialogFooter>
           </DialogContent>
